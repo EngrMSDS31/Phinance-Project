@@ -1,6 +1,6 @@
-import * as express from "express";
+import express from "express";
 import cors from "cors";
-import * as pinoHttp from "pino-http";
+import pinoHttp from "pino-http";
 import { clerkMiddleware } from "@clerk/express";
 import { publishableKeyFromHost } from "@clerk/shared/keys";
 import {
@@ -14,7 +14,7 @@ import { logger } from "./lib/logger.js";
 const app = express();
 
 app.use(
-  pinoHttp.default({
+  pinoHttp({
     logger,
     serializers: {
       req(req: { id?: string; method?: string; url?: string }) {
@@ -34,13 +34,12 @@ app.use(
 );
 
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
-
 app.use(cors({ credentials: true, origin: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use(
-  clerkMiddleware((req: Parameters<typeof getClerkProxyHost>[0]) => ({
+  clerkMiddleware((req: any) => ({
     publishableKey: publishableKeyFromHost(
       getClerkProxyHost(req) ?? "",
       process.env.CLERK_PUBLISHABLE_KEY,
