@@ -1,0 +1,99 @@
+**Transfer Transaction Fix & UI Fixes**
+
+---
+
+**BUG 1 — CRITICAL: TRANSFER TRANSACTIONS DO NOT MOVE MONEY BETWEEN CASH AND HOLDINGS**
+
+The Transfer: Cash to Holding and Transfer: Holding to Cash transactions save correctly but the money does not actually move between Total Cash and Current Value.
+
+**What must happen:**
+
+**Transfer: Cash to Holding**
+- Total Cash decreases by the transferred amount
+- Current Value (holdings market value) increases by the transferred amount
+- Total Portfolio Value stays the same (money moved internally, not added or removed)
+- The change must reflect immediately in the Portfolio detail screen AND on the Dashboard (Total Cash card, Current Value card, and Portfolio Allocation pie chart)
+
+**Transfer: Holding to Cash**
+- Current Value decreases by the transferred amount
+- Total Cash increases by the transferred amount
+- Total Portfolio Value stays the same
+- Same immediate reflection in Portfolio and Dashboard
+
+**How to fix:**
+
+1. Find the function that processes Transfer transactions when saved
+2. Check if it is actually updating both the cash balance AND the holding value — it is likely only recording the transaction without updating either balance
+3. For Cash to Holding transfers: deduct the amount from the portfolio's cash balance AND add it to the target holding's value
+4. For Holding to Cash transfers: deduct the amount from the holding's value AND add it to the portfolio's cash balance
+5. Make sure the Dashboard recalculates Total Cash and Current Value after a transfer saves
+6. Make sure the Portfolio Allocation pie chart updates to reflect the new values
+7. Test Cash to Holding: start with ₱770,000 cash → transfer ₱100,000 to MP2 holding → Total Cash becomes ₱670,000 → Current Value becomes ₱100,000 → Total Portfolio Value stays ₱770,000
+8. Test Holding to Cash: reverse the above → Current Value goes back to ₱0 → Total Cash goes back to ₱770,000
+9. Confirm Dashboard reflects both tests correctly including the pie chart
+
+---
+
+**UI FIX 2.1 — DIVIDEND CALENDAR HEADER ROW ALIGNMENT**
+
+The calendar navigation header is broken. The right arrow drops to a second line causing the entire calendar to shift down. All elements must be on a single horizontal line.
+
+**Current broken layout:**
+```
+[<]  [June ▾]  [2026 ▾]  [Today]
+                                    [>]   ← drops to second line
+```
+
+**Required correct layout:**
+```
+[<]   [June ▾]   [2026 ▾]   [Today]   [>]
+ ↑        ↑           ↑          ↑      ↑
+all five elements on ONE line, vertically centered
+```
+
+**Specific instructions for Replit:**
+
+1. Find the calendar header container and set it to `flexDirection: 'row'`, `alignItems: 'center'`, `justifyContent: 'space-between'`, `width: '100%'`
+2. The left arrow `[<]` is the first item, fixed width (e.g. 36px)
+3. The Month dropdown, Year dropdown, and Today button share the middle space equally — use `flex: 1` on each or set equal fixed widths so they fill the space between the two arrows
+4. The right arrow `[>]` is the last item, same fixed width as the left arrow (36px)
+5. All five elements must have the same height and be vertically centered with `alignItems: 'center'`
+6. The Month dropdown, Year dropdown, and Today button must all have the same font size and height
+7. The entire row must fit within the screen width with consistent left and right padding (e.g. 16px each side) — nothing should overflow or wrap to a second line
+8. Remove any extra margin or padding that is pushing the right arrow down
+9. Directly below this header row, the "X events this month" summary line appears with no extra gap — the calendar grid follows immediately after that
+
+**Visual target:**
+```
+|←16px→| [<] |gap| [  June ▾  ] [  2026 ▾  ] [  Today  ] |gap| [>] |←16px→|
+         ───────────────────────────────────────────────────────────
+         X events this month  ₱X,XXX.XX
+         ───────────────────────────────────────────────────────────
+         Sun  Mon  Tue  Wed  Thu  Fri  Sat
+         ...calendar grid...
+```
+
+---
+
+**UI FIX 2.2 — PHINANCE LOGO TOO SMALL IN HEADER**
+
+The Phinance logo in the top left corner of the app header is too small to read clearly.
+
+**Instructions for Replit:**
+
+1. Find the logo image/component in the app header (top left, where "Phinance" branding appears)
+2. Increase the logo size so it is clearly visible and readable while still fitting within the header space before the currency selector dropdown
+3. Target dimensions: logo height should be approximately **28–32px** tall. Width scales proportionally based on the logo's aspect ratio
+4. Make sure the logo does not overlap the currency selector (PHP ₱ dropdown) — there must be at least 8px gap between the logo and the dropdown
+5. Keep the logo vertically centered within the header bar
+6. Do not stretch or distort the logo — maintain its aspect ratio using `resizeMode: 'contain'` or equivalent
+7. If the logo is currently set with a fixed small size (e.g. 16px or 20px), increase it to the target size above
+8. Test on mobile: the full logo must be clearly visible without crowding the currency selector
+
+---
+
+**GLOBAL REQUIREMENTS**
+- Fix Bug 1 first — find the actual root cause in the transfer processing logic before changing anything
+- Test Bug 1 with real numbers and confirm Total Cash and Current Value both update correctly
+- UI fixes 2.1 and 2.2 are layout only — do not change any data or calculations
+- Do not break any currently working features

@@ -1,0 +1,377 @@
+Copy and paste this whole prompt into Replit:
+
+You are updating my existing portfolio app. Keep the current dark theme, spacing, card design, and mobile-first layout, but fix the portfolio creation flow, holdings management, filter behavior, Bonds/Funds portfolio logic, and make sure all of these changes also update correctly in the Portfolio, Dashboard, and Analytics tabs. Do not fix this in only one screen. Use one shared calculation layer so all tabs always show the same values.
+
+Important rules before coding:
+- Do not break currently working US, LSE, PSE, crypto, and custom asset flows unless required for shared logic cleanup.
+- Preserve the current dark UI style and mobile usability.
+- Fix the root cause, not just the visible symptom.
+- Centralize the holdings filter logic and portfolio metric logic in shared utilities/selectors.
+- Add regression tests for create portfolio, holdings filter, edit/delete holdings, Bonds/Funds calculations, and Dashboard/Analytics consistency.
+- If schema changes are needed, add a migration.
+- Apply all logic changes globally across Portfolio, Dashboard, and Analytics using one shared calculation layer so no tab shows outdated or conflicting values.
+
+## 1) Create Portfolio form revisions
+
+### 1.1 Add new Market Type options
+
+In the Create Portfolio modal, update the Market Type dropdown.
+
+Current options:
+- US Equities
+- Philippine Stocks
+- London Stock Exchange
+- Cryptocurrency
+- Custom Assets
+- Mixed
+
+Required change:
+- Add Bonds
+- Add Funds
+- Place both of them under Cryptocurrency in the dropdown order
+
+Target order:
+- US Equities
+- Philippine Stocks
+- London Stock Exchange
+- Cryptocurrency
+- Bonds
+- Funds
+- Custom Assets
+- Mixed
+
+Implementation instructions:
+1. Update the shared market type enum/constants instead of only editing the frontend dropdown.
+2. Ensure the new values are valid in:
+   - portfolio creation
+   - portfolio edit
+   - filters
+   - dashboard summaries
+   - analytics summaries
+   - any grouping logic
+   - any icon/color/label mapping logic
+3. Make sure Bonds and Funds portfolios can be created, saved, reopened, and edited normally.
+4. Do not map Bonds and Funds back into Custom Assets silently. They should be first-class portfolio market types.
+
+Acceptance criteria:
+- Bonds and Funds appear in the Create Portfolio dropdown.
+- They save correctly and remain selected after creation and reload.
+
+### 1.2 Fix Base Currency and Color not saving on create
+
+Problem:
+- When I create a portfolio and choose a currency and color, those values are not properly saved on first create.
+- I currently need to edit the portfolio again and save a second time for them to stick.
+
+Required fix:
+- Base Currency and Color must save correctly on the initial Create action.
+
+Implementation instructions:
+1. Inspect the Create Portfolio submit handler, form state, default values, schema, and API payload.
+2. Check whether:
+   - form state is not bound correctly
+   - selected values are missing from the create payload
+   - backend create mutation ignores the fields
+   - values are only being updated in edit flow but not create flow
+3. Fix this end-to-end:
+   - UI state
+   - validation schema
+   - API request payload
+   - database insert
+   - returned response
+   - local cache/state update
+4. After create, immediately render the new portfolio with the correct saved:
+   - base currency
+   - color
+5. Add a regression test:
+   - create portfolio with non-default currency and non-default color
+   - assert the new portfolio shows the same values without needing edit
+
+Acceptance criteria:
+- Base Currency saves correctly on first create.
+- Color saves correctly on first create.
+- No second edit/save is required.
+
+## 2) Holdings list: edit and delete actions
+
+Inside each portfolio’s Holdings List, add:
+- Edit button
+- Delete button
+
+Goal:
+- I need to be able to edit or delete an asset/holding directly from the holdings list.
+
+Implementation instructions:
+1. Add holding-level action controls in each portfolio holdings list row.
+2. On mobile, keep the layout clean:
+   - use an overflow menu
+   - swipe action
+   - or compact icon buttons if needed
+3. Edit action should allow updating the holding/asset details that are editable in your current schema.
+4. Delete action should:
+   - ask for confirmation
+   - clearly explain whether it removes only the holding record or also related transactions
+5. If the holding has related transactions:
+   - either prevent hard delete and explain why
+   - or perform a safe delete/archive strategy
+6. Prefer a soft-delete/archive model if that better preserves transaction history.
+7. Refresh related calculations automatically after edit/delete.
+8. Make sure the changes reflect not only in Portfolio, but also in Dashboard and Analytics if totals, allocations, or holdings-based summaries are affected.
+
+Acceptance criteria:
+- Every holding row has edit and delete access.
+- Editing updates the row and related totals correctly.
+- Deleting behaves safely and predictably.
+- Changes are reflected across Portfolio, Dashboard, and Analytics.
+
+## 3) Fix holdings filter when toggle is “ALL”
+
+Problem:
+- In Holdings List, when the toggle is set to ALL, sold stocks still do not appear together with active stocks.
+- Right now, both ALL and ACTIVE ONLY effectively show only active holdings.
+
+Required fix:
+- ALL must show both:
+  - active holdings
+  - sold/closed holdings
+- ACTIVE ONLY must show only active holdings
+
+Implementation instructions:
+1. Find the shared holdings filter logic or selector.
+2. Identify why sold/closed holdings are being excluded even when ALL is selected.
+3. Likely root causes to check:
+   - DB query always filters quantity > 0
+   - frontend selector always applies active-only filter
+   - sold holdings are not stored/returned in the holdings source
+   - status field not maintained correctly after full sell-out
+4. Redefine the filter rules clearly:
+   - ALL = active + sold/closed + any holding with history in that portfolio
+   - ACTIVE ONLY = only holdings with active quantity or active balance/value
+5. Ensure this works for:
+   - stocks
+   - bonds
+   - funds
+   - custom assets
+6. If sold holdings are currently removed from the holdings table entirely, create a safe approach so historical holdings remain viewable in ALL.
+7. Add tests for:
+   - partially sold holding
+   - fully sold stock
+   - fully withdrawn non-stock asset
+   - active asset
+8. If Dashboard and Analytics use holdings-based summaries, make sure sold/closed holdings are handled consistently there too, according to the intended metric definitions.
+
+Acceptance criteria:
+- ALL shows active and sold holdings together.
+- ACTIVE ONLY hides sold/closed holdings.
+- Filter behavior is consistent across asset types.
+- No incorrect holdings visibility side effects in Dashboard or Analytics.
+
+## 4) Bonds and Funds portfolio logic
+
+This is the most important logic change.
+
+### 4.1 Deposits into Bond or Fund holdings must not become idle cash
+
+Problem:
+- When I deposit into a Bond or Fund holding inside a Bonds or Funds portfolio, it should not be considered idle cash.
+- It should be treated as a Bond Deposit or Fund Deposit, meaning it belongs to the holding/asset value itself, not unallocated portfolio cash.
+
+Required business rule:
+- Deposit into a Bond/Fund holding = invested asset contribution, not idle cash.
+- Idle cash should only increase when money is withdrawn out of the Bond/Fund holding and remains unallocated at the portfolio level.
+
+Implementation instructions:
+1. Introduce or update asset capability rules for Bonds and Funds.
+2. For Bonds and Funds:
+   - Deposit increases holding principal/invested amount
+   - Withdrawal reduces holding principal and may create portfolio cash if modeled that way
+   - Dividend is allowed
+   - Buy/Sell stock-style logic is not required unless explicitly supported
+3. Do not route Bond/Fund deposits through the idle cash bucket.
+4. Separate clearly:
+   - portfolio idle cash
+   - invested principal in bonds/funds
+   - dividend income from bonds/funds
+5. If a Bond/Fund portfolio contains only Bond/Fund holdings, the default assumption should be that deposits to a holding are invested, not idle.
+6. Make sure this logic updates Portfolio, Dashboard, and Analytics totals consistently.
+
+Acceptance criteria:
+- Deposit into Bond/Fund holding increases invested value, not idle cash.
+- Idle cash stays zero unless there is actual unallocated cash or withdrawal cash.
+- The same result is reflected in Portfolio, Dashboard, and Analytics.
+
+### 4.2 Bond/Fund dividend transaction should not require shares and price per share
+
+Problem:
+- If I add a Dividend transaction to a Bond or Fund holding, it should not ask for:
+  - number of shares
+  - price per share
+- This is not a stock workflow.
+- But it must still be counted as Dividend in overall calculations.
+
+Implementation instructions:
+1. Update transaction form logic by asset type and transaction type.
+2. For Bond/Fund holdings:
+   - Dividend transaction should use simple amount-based input
+   - hide quantity/shares input
+   - hide price-per-share input
+3. Save this transaction as dividend income attached to the holding.
+4. Make sure the dividend is counted in:
+   - holding returns
+   - portfolio dividends
+   - total profit
+   - dashboard totals
+   - analytics totals
+   - global dividend totals across all portfolios
+5. Do not break stock dividend entry behavior for equity portfolios.
+
+Acceptance criteria:
+- Dividend transaction for Bond/Fund holding uses amount-only entry.
+- No share count or price-per-share is required.
+- Dividend is included in all dividend calculations across Portfolio, Dashboard, and Analytics.
+
+### 4.3 Portfolio card logic for Bonds and Funds portfolios
+
+For Bonds and Funds portfolios, use this logic:
+
+- Total Portfolio Value = Current Value
+- Total Profit = Dividends
+- Current Value = Total Bond and Fund Deposit + Total Profit (Dividend)
+- Total Cash = only has a value once I withdraw from bonds/funds
+- Before withdrawal, Total Cash should be zero
+
+Implementation instructions:
+1. Add market-type-aware portfolio metric calculators.
+2. Do not force Bonds/Funds portfolios into stock-style capital gain logic.
+3. For Bonds/Funds portfolios:
+   - Capital Gain = 0 unless a future explicit valuation model is introduced
+   - Realized Gains = 0 unless a future redemption gain model is introduced
+   - Total Profit = dividends only
+4. Define formulas clearly:
+   - `bondFundPrincipal = sum(deposit transactions into bond/fund holdings) - sum(principal withdrawals if applicable)`
+   - `bondFundDividends = sum(dividend transactions for bond/fund holdings)`
+   - `currentValue = bondFundPrincipal + bondFundDividends`
+   - `totalPortfolioValue = currentValue + idleCash`
+5. But for the requested rule in a pure Bond/Fund portfolio:
+   - if withdrawal cash is immediately the only source of idle cash, then before withdrawal idle cash = 0
+   - if there is no unallocated cash, then Total Portfolio Value = Current Value
+6. Make this rule robust:
+   - If there actually is idle cash later, Total Portfolio Value should still mathematically be Current Value + Total Cash
+   - But in the normal pre-withdrawal case, they will be equal because Total Cash is zero
+7. Update the portfolio cards to display:
+   - Total Portfolio Value
+   - Total Profit
+   - Current Value
+   - Total Cash
+   using the correct bond/fund formulas
+8. Also update Dashboard and Analytics cards and summaries to use the same corrected formulas for Bonds and Funds portfolios.
+9. Add helper functions specific to this asset category rather than scattering conditions in components.
+
+Important note:
+- The user-facing behavior requested is:
+  - deposits into bond/fund holdings are invested value
+  - dividends are profit
+  - cash only appears after withdrawal
+- Implement that behavior cleanly in the calculator layer.
+
+Acceptance criteria:
+- Bond/Fund deposits increase Current Value, not Total Cash.
+- Bond/Fund dividends increase Total Profit and are included in Current Value per requested logic.
+- Total Cash stays zero until withdrawal/unallocated cash exists.
+- Portfolio cards show the correct values.
+- Dashboard and Analytics also show the same corrected values.
+
+## 5) Dashboard and Analytics must also update from these changes
+
+Important:
+- All of the new logic for Bonds, Funds, holdings status, deposits, withdrawals, dividends, current value, total cash, and total profit must update not only in the Portfolio tab, but also in the Dashboard and Analytics tabs.
+- Do not fix this only inside Portfolio. The same rules must flow through the whole app from one shared calculation layer.
+
+Implementation instructions:
+1. Reuse the same shared selectors/calculators for:
+   - Dashboard
+   - Analytics
+   - Portfolio
+2. Do not create separate formulas per tab.
+3. Any change made to:
+   - portfolio market type
+   - holding type
+   - holding status
+   - deposit/withdrawal behavior
+   - dividend behavior
+   - current value
+   - total cash
+   - total profit
+   must automatically reflect in all tabs consistently.
+4. For Bonds and Funds portfolios, ensure the same business rules appear everywhere:
+   - deposits into bond/fund holdings count as invested value, not idle cash
+   - bond/fund dividends count as dividends and total profit
+   - current value includes bond/fund deposits plus dividend profit, based on the requested logic
+   - total cash remains zero unless there is an actual withdrawal or unallocated cash
+5. Update Dashboard cards to use the corrected portfolio totals after these changes.
+6. Update Analytics cards and charts to use the corrected portfolio totals after these changes.
+7. If Dashboard has portfolio allocation, summaries, or totals, they must include Bonds and Funds portfolios correctly.
+8. If Analytics has performance summaries, dividend totals, asset allocation, holdings by value, or total profit breakdowns, they must also reflect the Bonds/Funds rules correctly.
+9. Ensure sold holdings behavior also updates consistently across Dashboard and Analytics if those tabs use holdings-based summaries.
+
+Acceptance criteria:
+- Portfolio, Dashboard, and Analytics all show the same corrected numbers for the same portfolio.
+- Bonds and Funds logic is consistent across all tabs.
+- No tab keeps old stock-only assumptions after the change.
+
+## 6) Recommended architecture
+
+Use a capability-based design instead of hardcoding per-screen special cases.
+
+Create shared rules like:
+- portfolio market type rules
+- asset type rules
+- transaction type rules
+- metric calculator profiles
+
+Suggested examples:
+- `isTradingPortfolioType(marketType)`
+- `supportsDividendAmountOnly(assetType)`
+- `shouldDepositCountAsInvestedValue(assetType, portfolioType)`
+- `selectPortfolioIdleCash(portfolioId)`
+- `selectPortfolioCurrentValue(portfolioId)`
+- `selectPortfolioTotalProfit(portfolioId)`
+
+Do not compute these rules directly in UI components.
+
+## 7) QA checklist
+
+Before finishing, verify all of these:
+1. Create Portfolio dropdown includes Bonds and Funds under Cryptocurrency.
+2. Base Currency saves correctly on first create.
+3. Color saves correctly on first create.
+4. Holdings list has edit and delete actions.
+5. ALL filter shows sold and active holdings together.
+6. ACTIVE ONLY shows only active holdings.
+7. Bond/Fund deposits do not become idle cash.
+8. Bond/Fund dividend form does not require shares or price per share.
+9. Bond/Fund dividends are included in portfolio and app-wide dividend totals.
+10. Bond/Fund portfolio cards use the requested logic.
+11. Dashboard updates correctly after these changes.
+12. Analytics updates correctly after these changes.
+13. No stock workflow is broken for equities.
+14. No mobile layout regressions in the create modal or holdings list.
+15. Portfolio, Dashboard, and Analytics stay numerically consistent.
+
+## 8) Final deliverables
+
+After implementation, provide:
+1. Files changed
+2. Root cause of the create-portfolio save bug
+3. Root cause of the ALL filter bug
+4. New Bonds/Funds transaction rules
+5. New Bonds/Funds portfolio calculation rules
+6. How Dashboard and Analytics were updated to stay consistent
+7. Any migration or historical data assumptions
+
+A few important suggestions:
+- Fix the create-portfolio save bug first, because it is likely a payload/state synchronization issue.
+- Fix the ALL holdings filter at the selector/query level, not only in the UI.
+- Implement Bonds and Funds through shared capability rules, not copy-pasted special cases.
+- Prefer soft delete/archive for holdings if transaction history exists.
+- Keep dividend calculations unified across all asset classes so Bonds/Funds dividends roll up correctly with stock dividends. [addyosmani](https://addyosmani.com/blog/good-spec/)

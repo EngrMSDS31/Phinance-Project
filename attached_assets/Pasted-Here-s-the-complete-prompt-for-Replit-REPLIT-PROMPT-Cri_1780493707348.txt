@@ -1,0 +1,213 @@
+Here's the complete prompt for Replit:
+
+---
+
+**REPLIT PROMPT — Critical Fixes & UI Revisions (Follow-Up)**
+
+Implement only what is listed below in priority order. **Do not change anything not mentioned here. Do not break any currently working functionality.**
+
+---
+
+**PRIORITY 1 — ADD HOLDING IS BROKEN (CRITICAL)**
+
+The "+ Add Holding" function does not work. Find the root cause and fix it completely.
+
+**Required fields in the Add Holding form:**
+
+```
+Asset Type        [Dropdown: Stock, ETF, Fund, Crypto, Bond, 
+                   Savings/Deposit, Cash Asset, Custom]
+Name              [Text input]
+Code / Ticker     [Text input]
+Currency          [Dropdown — full list of available currencies,
+                   NOT a free-text field]
+Notes             [Optional text input]
+─────────────────────────────────
+[        Add Holding        ]
+```
+
+**Rules:**
+- Asset Type must be a dropdown with all listed options
+- Currency must be a searchable dropdown showing all supported currencies — not a plain text field. The user selects from the list, not types manually
+- When a transaction is later added for this holding, the Currency field in the transaction form must auto-populate with the currency selected during Add Holding
+- All fields except Notes are required — show inline validation if submitted empty
+- After successful save, the holding must appear immediately in the portfolio's Holdings list
+- **Test and confirm this works in ALL portfolio types:** Stock, ETF, Fund, Crypto, Bond, Savings/Deposit, Cash Asset, Custom, and all markets including PSE, US, LSE, and Custom markets
+
+**Root cause checklist:**
+- Check if the API endpoint for creating a holding exists and is correctly wired
+- Check if the form submission is sending the correct payload matching the backend schema
+- Check if required field validation is blocking submission silently
+- Check if the portfolio ID is being passed correctly with the request
+- Wrap the save call in try/catch and surface any error message to the user if it fails
+
+---
+
+**PRIORITY 2 — TRANSACTION PAGE NOT UPDATED IN TWO REMAINING LOCATIONS (CRITICAL UI)**
+
+The correct unified transaction page (as shown in the Reference Transaction Window screenshots) is already working in some places. Only fix the two remaining locations below. **Do not touch anything that is already working.**
+
+**2.1 — Portfolio Transactions List: Transaction Detail & Edit Page**
+
+When clicking a transaction record in the Portfolio's Transactions List, a detail window pops up. This detail window and its Edit form are still using the old format. Fix both.
+
+**Transaction Detail window (what shows when tapping a record):**
+
+```
+[Transaction Type badge]   STOCK SYMBOL
+─────────────────────────────────────────
+Date                        [value]
+Quantity                    [value]
+Price                       [value]
+Gross Amount                [value]
+Fee                         [value, with correct sign]
+Net Amount                  [value, green]
+─────────────────────────────────────────
+[    Edit    ]              [   Delete   ]
+```
+
+**Net Amount sign rules in the detail view (UI display only, no logic change):**
+- BUY: Net Amount = Gross Amount + Fee (fee is a cost added on top)
+- SELL: Net Amount = Gross Amount − Fee − Tax (fee and tax are deducted)
+- DIVIDEND: Net Amount = Gross Dividend − Withholding Tax (tax is deducted)
+
+Display the fee line with the correct sign prefix:
+- BUY: show `+ Fee` with `+` prefix
+- SELL/DIVIDEND: show `− Fee` / `− Tax` with `−` prefix in red
+
+**Edit form (when tapping Edit from the detail window):**
+
+Must open the same unified "Edit Transaction" window used everywhere else in the app. The current edit form for this location still shows the old format (transaction type badge + ticker as title, fields laid out differently). Replace it entirely with the unified format:
+
+```
+         Edit Transaction                    ✕
+─────────────────────────────────────────────
+Type      [Dropdown]         Date  [Date Picker]
+Stock/Symbol [Search]        Market [Dropdown]
+Quantity  [Input]            Price/Share [Input]
+Fee       [Input]            Tax   [Input]
+Currency  [Display]
+─────────────────────────────────────────────
+Gross Amount        ₱X,XXX.XX
++ Buy Fee / − Fee   ±₱XX.XX   (correct sign per type)
+────────────────────
+Net Amount          ₱X,XXX.XX  (green, bold)
+─────────────────────────────────────────────
+Notes    [Optional]
+─────────────────────────────────────────────
+[      Cancel      ]    [    Save Changes    ]
+```
+
+Pre-populate all fields from the existing transaction. Save must work and update all affected portfolio metrics.
+
+**2.2 — Dividend Calendar & List View: Edit Transaction Page**
+
+The Edit Transaction window in Dividend Calendar (both Calendar View and List View) is still using the old format (showing ticker + "ORDINARY" as title, with Gross Dividend field as a single full-width input, and different field layout than the reference).
+
+Replace with the unified Dividend Edit Transaction window matching the reference screenshot exactly:
+
+```
+         Edit Transaction                    ✕
+─────────────────────────────────────────────
+Type      Dividend           Date  [Date Picker]
+Stock/Symbol [pre-filled, editable]
+No. of Shares [Input]        Price per Share [Input]
+Dividend Tax (%) [Input]
+Currency  [Display]
+─────────────────────────────────────────────
+Gross Dividend      ₱X,XXX.XX     (neutral)
+− Withholding Tax   −₱XX.XX       (red)
+────────────────────
+Net Received        ₱X,XXX.XX     (green, bold)
+─────────────────────────────────────────────
+Notes    [Optional]
+─────────────────────────────────────────────
+[      Cancel      ]    [    Save Changes    ]
+```
+
+- Title: "Edit Transaction" centered at top
+- All fields pre-populated from the existing record
+- Save must work without "Failed to update" error for all dividend records including custom portfolio dividends (MP2, etc.)
+- Do not remove the Edit and Delete buttons from the detail sheet — keep them, just fix the Edit form that opens
+
+---
+
+**PRIORITY 3 — MINOR UI & UX FIXES (MOBILE VIEW ONLY)**
+
+**3.1 — Global Hide Values (Eye Icon) Still Not Working**
+
+The eye icon toggle currently does not hide numbers. Fix this completely.
+
+**Rule:** When the eye icon is toggled ON (hidden state), every single numerical value in the entire app must be replaced with `••••`. This includes:
+
+- Dashboard: all card values, percentages, chart values, pie chart labels
+- Analytics: all card values, all percentages, all chart axis labels, all tooltip values, IRR/TWR values
+- Dividend Calendar: all amounts in Calendar tiles, all amounts in List View amount column, all values in detail sheets
+- Portfolio: Total Portfolio Value, Invested, all card values, all Holdings list values and percentages, all asset detail values
+
+**Implementation:**
+- Create a single global `isHidden` boolean state stored in context or a global state manager
+- Every component that displays a number must read `isHidden` and render `••••` when true
+- The eye icon in the header toggles this global state
+- State persists across tab switches and app restarts (save to AsyncStorage)
+- One tap hides everything; one tap reveals everything
+- Currency symbols and labels remain visible — only the numeric portion is replaced
+
+**3.2 — Swipe Down to Close Bottom Sheet Windows**
+
+All bottom sheet / modal windows that slide up from the bottom (Holdings detail, transaction detail, any popup panel) currently can only be closed with the ✕ button.
+
+**Fix:** Add swipe-down-to-close gesture to all bottom sheet windows:
+- User swipes downward on the sheet → sheet animates down and closes
+- Implement a drag handle indicator (small horizontal bar) at the top center of each sheet to signal it is swipeable
+- The swipe threshold should be approximately 100px downward drag before releasing to trigger close
+- If the user drags less than the threshold and releases, the sheet snaps back to open position
+- The ✕ button remains functional — this is an additional gesture, not a replacement
+- Apply to ALL bottom sheet style windows in the app uniformly
+
+**3.3 — Dividend List View: Column Alignment & Formatting**
+
+Fix the Dividend List (Calendar → List tab) table formatting:
+
+**Column alignment:**
+- Pay Date: left-aligned
+- Stock: center-aligned (already appears so, maintain)
+- Shares: **right-aligned**
+- Per Share: **right-aligned**
+- Amount: **right-aligned**
+- Status: center-aligned (maintain)
+
+**Number formatting rules:**
+- Shares: whole numbers only, no decimals, comma separator for thousands (e.g. `18,000`)
+- Per Share: exactly 2 decimal places (e.g. `0.26`)
+- Amount: exactly 2 decimal places with currency symbol (e.g. `₱78.90`)
+- All amounts must show in full — no truncation with `...` (e.g. `₱1,468....` must become `₱1,468.80`)
+
+**Typography uniformity:**
+- All text and values in the list table must use the same font family, font size, and font weight
+- No bold text anywhere in the table rows — all cells use regular weight
+- Header row labels (Pay Date, Stock, Shares, Per Share, Amount, Status) may use a slightly muted color to distinguish from data rows but must also be regular weight
+- Reduce the font size of all text within the table rows by 10% from current size to ensure all columns fit within the mobile screen width without horizontal scrolling
+- Maintain existing green color for Amount values and existing styling for the Paid/Unpaid status badges
+
+**3.4 — Portfolios Page: Subtext Size & Button Label**
+
+Two small fixes on the main Portfolios list page:
+
+*Subtext fix:*
+- "Manage your investment accounts." text below the "Portfolios" heading is currently too large compared to the equivalent subtext on Dashboard ("Your portfolio at a glance."), Analytics, and Dividend Calendar
+- Match the font size exactly to the subtext size used on those other pages — it should be noticeably smaller than the page title
+
+*Button fix:*
+- Rename "+ New Portfolio" button → **"+ Add Portfolio"**
+- Match the button's width, height, padding, font size, and position to the "+ Add Transaction" button on the Dashboard page exactly — same blue background, same dimensions, same right-alignment
+
+---
+
+**GLOBAL REQUIREMENTS**
+- Implement all items above completely before marking done
+- Do not change any financial calculations, data logic, or currently working features
+- Do not change any transaction pages that are already using the correct unified format
+- Every save/edit/delete operation must succeed and trigger a full UI refresh of affected data
+- No new runtime errors introduced by any of these changes
+- Test Priority 1 (Add Holding) in at least 3 different portfolio types before marking complete

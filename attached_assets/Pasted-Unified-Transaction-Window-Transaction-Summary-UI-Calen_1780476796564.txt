@@ -1,0 +1,154 @@
+Unified Transaction Window, Transaction Summary UI, Calendar UI & Holdings Swipe Fix**
+
+Please implement the following UI changes only. **Do not change any calculations, data logic, financial formulas, or database links.** These are purely visual and interaction fixes.
+
+---
+
+**SECTION 1: UNIFIED ADD/EDIT TRANSACTION WINDOW — GLOBAL**
+
+There are currently different transaction window formats across the app. All must be replaced with one single unified format matching the reference screenshot.
+
+**1.1 Window Title**
+
+The title at the top center of the window must follow this rule:
+- When **adding** a new transaction → title is **"Add Transaction"**
+- When **editing** an existing transaction → title is **"Edit Transaction"**
+
+Both titles use the same font size, weight, and centered position. Never show the ticker name or transaction type as the title.
+
+**1.2 Unified Window Layout**
+
+```
+        Add Transaction  (or "Edit Transaction")          ✕
+─────────────────────────────────────────────────────────
+Type        [Dropdown]              Date    [Date Picker]
+Stock/Symbol [Search field]         Market  [Dropdown]
+Quantity    [Input]                 Price/Share [Input]
+Fee         [Input]                 Tax     [Input]
+Currency    [Input/Display]
+─────────────────────────────────────────────────────────
+  [Summary section — see 1.3 below]
+─────────────────────────────────────────────────────────
+Notes       [Optional text input]
+─────────────────────────────────────────────────────────
+[        Cancel        ]    [  Add Transaction / Save Changes  ]
+```
+
+**1.3 Transaction Summary UI — Correct Signs and Labels**
+
+The summary section at the bottom of the form must display the breakdown with correct operator signs. The calculations are already correct in the app — only the UI display of signs and labels needs to match the following:
+
+**BUY Transaction Summary:**
+```
+Gross Amount        ₱X,XXX.XX       (Quantity × Price, neutral color)
++ Buy Fee           +₱XX.XX         (plus sign, neutral or muted color)
+─────────────────────────────────
+Net Amount          ₱X,XXX.XX       (green, bold)
+```
+
+**SELL Transaction Summary:**
+```
+Gross Amount        ₱X,XXX.XX       (Quantity × Price, neutral color)
+− Sell Fee          −₱XX.XX         (minus sign, red)
+− Tax               −₱XX.XX         (minus sign, red, only if Tax > 0)
+─────────────────────────────────
+Net Amount          ₱X,XXX.XX       (green, bold)
+```
+
+**DIVIDEND Transaction Summary:**
+```
+Gross Dividend      ₱X,XXX.XX       (No. of Shares × Price per Share, neutral color)
+− Withholding Tax   −₱X,XXX.XX      (minus sign, red)
+─────────────────────────────────
+Net Received        ₱X,XXX.XX       (green, bold)
+```
+
+**Rules for the summary section:**
+- Each line shows: label on the left, sign + amount on the right
+- The operator sign (+ or −) is part of the amount display, not a separate column
+- A horizontal divider line separates the line items from the Net/Total row
+- The Net row label and amount are bold
+- Positive fees (Buy Fee) show with a `+` prefix in neutral color
+- Negative deductions (Sell Fee, Tax, Withholding Tax) show with a `−` prefix in red
+- Net Amount / Net Received always shown in green
+- All values in the summary recalculate live as the user types in any input field
+- If Fee or Tax is 0, that line may be hidden or shown as ₱0.00 — be consistent
+
+**1.4 Fields Shown Per Transaction Type:**
+
+| Type | Fields Visible |
+|---|---|
+| Buy | Stock, Market, Quantity, Price/Share, Buy Fee, Tax, Currency → Summary: Gross + Buy Fee = Net Amount |
+| Sell | Stock, Market, Quantity, Price/Share, Sell Fee, Tax, Currency → Summary: Gross − Sell Fee − Tax = Net Amount |
+| Dividend | Stock, Market, No. of Shares, Price per Share, Dividend Tax %, Currency → Summary: Gross Dividend − Withholding Tax = Net Received |
+| Deposit | Amount, Currency, Notes only |
+| Withdrawal | Amount, Currency, Notes only |
+| Other Income | Amount, Currency, Notes only |
+| Other Expenses | Amount, Currency, Notes only |
+
+Hide fields that are not relevant to the selected type. Do not show empty irrelevant fields.
+
+**1.5 Apply This Window To All Entry Points:**
+
+1. Dashboard → "+ Add Transaction" button
+2. Dividend Calendar View → Edit (tapping Edit on a dividend record)
+3. Dividend List View → Edit (tapping Edit on a dividend record)
+4. Portfolio Tab → "+ Add Transaction" button inside a portfolio
+5. Portfolio Tab → Edit Transaction in the Transactions list
+
+**1.6 Edit Form Pre-Population:**
+When opening Edit for any existing transaction, all fields must be pre-filled with the current saved values. The title shows "Edit Transaction". The save button reads "Save Changes".
+
+**1.7 Fix MP2 Custom Dividend Edit ("Failed to update" bug):**
+The MP2 custom dividend edit form currently shows "Total Amount" and "Payment Date" fields and throws a "Failed to update" error. Fix this by mapping these fields to the unified window: "Total Amount" → Net Amount field, "Payment Date" → Date field. The unified window must handle saving this correctly without error.
+
+**1.8 Transactions List — Always Show Net Amount:**
+In every Transactions List across the app (Portfolio Transactions list, Dividend Calendar List, and any other list showing transactions), the amount column must always display the **Net Amount**. Never show Gross Amount in a list. Apply consistently everywhere.
+
+---
+
+**SECTION 2: DIVIDEND CALENDAR VIEW — Date Cell Display**
+
+Currently each event shows the ticker + "ex" text (e.g. "TEL ex"). Change this to:
+
+**New format per calendar date cell:**
+```
+┌──────────────┐
+│      16      │  ← date number (unchanged)
+│    TEL       │  ← ticker symbol only, no "ex" or other suffix
+│ ₱1,863.00   │  ← net dividend amount, smaller font
+└──────────────┘
+```
+
+**Rules:**
+- Remove "ex" text entirely — ticker only
+- Net dividend amount on a second line below the ticker in smaller font (9–10px)
+- Use the portfolio's currency symbol with 2 decimal places
+- Multiple events on the same date: stack them vertically, each showing ticker + amount
+- If space is tight, abbreviate the amount with "k" notation (e.g. ₱1.9k) rather than overflow
+- Keep the existing yellow/green dot legend for ex-dividend vs payment date at the bottom of the calendar — do not change it
+
+---
+
+**SECTION 3: HOLDINGS LIST — Prevent Accidental Swipe Reveal**
+
+Currently scrolling the Holdings list accidentally reveals the Edit/Delete swipe buttons.
+
+**Fix:**
+- Edit and Delete buttons must **only** appear on a deliberate **right-to-left swipe** on a row
+- Vertical scrolling must never trigger the reveal, even with a slight horizontal component
+- Require minimum horizontal swipe distance (~15–20px) AND horizontal delta must exceed vertical delta before revealing actions
+- A vertical scroll that starts with slight horizontal movement must not open swipe actions
+- Do not change the swipe-to-reveal, Edit action, Delete action, or swipe-to-close behavior — only prevent accidental triggering
+
+---
+
+**GLOBAL REQUIREMENTS**
+- Zero changes to any financial calculations, data storage, or business logic
+- Title rule: "Add Transaction" when adding, "Edit Transaction" when editing — applied uniformly to all five entry points
+- Summary section signs must match the rules above exactly: Buy Fee is +, Sell Fee and taxes are −, always
+- Net Amount / Net Received always green and bold in the summary
+- Unified window looks and behaves identically across all five entry points
+- Net Amount displayed consistently in all transaction lists — never Gross
+- No new runtime errors introduced
+- Test each transaction type independently to verify correct fields, correct summary signs, correct title, and correct save behavior

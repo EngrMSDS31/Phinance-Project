@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Portfolio Tracker"
+version = "1.0.0"
+id = "artifacts/portfolio-tracker"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25559
+
+[services.development]
+run = "pnpm --filter @workspace/portfolio-tracker run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/portfolio-tracker", "run", "build" ]
+publicDir = "artifacts/portfolio-tracker/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25559"
+BASE_PATH = "/"

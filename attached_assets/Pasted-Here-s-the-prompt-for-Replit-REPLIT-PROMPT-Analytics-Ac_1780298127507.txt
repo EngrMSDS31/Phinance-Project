@@ -1,0 +1,135 @@
+Here's the prompt for Replit:
+
+---
+
+**REPLIT PROMPT — Analytics Accuracy, Calendar Edit/Delete, Portfolio Holdings Display, Global UI Fixes**
+
+Please implement all changes below carefully. Clearly separated by section for easy implementation.
+
+---
+
+**SECTION 1: ANALYTICS — Data Accuracy Fixes**
+
+**1.1 Current Value & Invested — Use Portfolio Tab as Source**
+
+The Current Value and Invested amounts in Analytics must match exactly what is shown in the Portfolio Tab.
+
+**Rules:**
+- For an **individual portfolio** view in Analytics: Current Value = that portfolio's `Total Portfolio Value`; Invested = that portfolio's `Invested` value shown in the portfolio detail screen
+- For **All Portfolios** view in Analytics: Current Value = sum of all portfolios' `Total Portfolio Value` (FX-converted to display currency); Invested = sum of all portfolios' `Invested` values (FX-converted)
+- These must not be independently recomputed in Analytics — read directly from the same `computePortfolioReturns()` engine that powers the Portfolio Tab
+- After this fix, verify: Analytics Current Value for Philippine Stocks = ₱461,440.17 (matching the Portfolio Tab screenshot)
+
+**1.2 Dividends Bar Graph — Accurate Values on Bar Selection**
+
+When a bar is selected/tapped in the Dividends chart, the tooltip showing the dividend amount is currently incorrect. It must show the accurate net dividend total for that specific period.
+
+**Fix per view:**
+
+*Monthly view:* When a month bar is selected, the tooltip must show the sum of all `Net Amount` (gross dividend − dividend tax) for dividend transactions in that specific month and year. Use the year shown in the navigator above the chart.
+
+*Yearly view:* When a year bar is selected, the tooltip must show the sum of all `Net Amount` for dividend transactions in that entire year.
+
+*Asset view:* When an asset bar is selected, the tooltip must show the sum of all `Net Amount` for all dividend transactions for that specific ticker across all time (or filtered to the selected portfolio if in individual portfolio view).
+
+**Data source:** Read directly from the dividend transactions stored in the database. For each transaction of type `DIVIDEND`, use `Net Amount = Gross Amount − Dividend Tax`. Do not use estimated or projected values — use only actual recorded transactions.
+
+**Implementation check:** Cross-reference with the Dividend Calendar List view which already shows correct per-transaction Net Amounts. The bar chart totals must equal the sum of those same transaction Net Amounts grouped by the appropriate period.
+
+---
+
+**SECTION 2: DIVIDEND CALENDAR — Add Edit & Delete to Record Detail**
+
+**2.1 Edit and Delete Buttons in Dividend Record Detail Sheet**
+
+When a user taps a dividend record in either Calendar View or List View, a detail bottom sheet opens showing: Portfolio, Date, No. of Shares, Price per Share, Dividend Tax, Net Amount, Gross Amount, Currency, and an "Already Paid" status button.
+
+**Add two buttons at the bottom of this detail sheet:**
+- **Edit** button (secondary style, left side or full width stacked): opens the edit form pre-populated with all current transaction values, allowing the user to modify any field and save
+- **Delete** button (destructive red style, right side or full width stacked below Edit): shows a confirmation prompt ("Are you sure you want to delete this dividend transaction?") with Confirm and Cancel options. On confirm, deletes the transaction, closes the sheet, refreshes the calendar and list view, and triggers a recalculation of all affected portfolio metrics
+
+**Retain everything else** about the detail sheet — layout, fields displayed, colors, status badge — only add these two buttons at the bottom.
+
+---
+
+**SECTION 3: PORTFOLIO — Show All Holdings Including Sold Stocks**
+
+**3.1 All Sold Stocks Must Appear When "All" Filter is Selected**
+
+When the user selects "All" (not "Active only") in the Holdings filter, every stock ever held in that portfolio must appear — including all sold/closed positions.
+
+**Current bug:** Only a few closed stocks are showing. Many sold stocks are missing entirely from the list even when "All" is selected.
+
+**Fix:**
+- Query all asset records associated with the portfolio, regardless of current share count
+- Stocks with 0 shares (fully sold) should appear with a "CLOSED" badge, ₱0.00 current value, and their realized profit percentage
+- Do not filter out any asset that has at least one historical transaction in this portfolio
+- Sort order: active holdings first (shares > 0), then closed holdings (shares = 0), both groups sorted alphabetically
+
+**3.2 Fix Holding Count Subtext**
+
+Under the Current Value card in the Portfolio detail, there is a subtext showing "X holdings." This number must match the actual count of items displayed in the Holdings list under the current filter:
+
+- When "Active only" is selected: count = number of assets with shares > 0
+- When "All" is selected: count = total number of distinct assets (active + closed) in this portfolio
+
+After fixing 3.1, the count shown in the subtext must equal the number of rows visible in the Holdings list at all times.
+
+---
+
+**SECTION 4: UI CHANGES**
+
+**4.1 Global Hide Numbers — Eye Icon Toggle**
+
+The eye icon toggle currently does not hide all numbers across the app. It must hide **every numerical value** app-wide when toggled on.
+
+**Scope — hide ALL of the following when the eye icon is toggled ON:**
+- Dashboard: Current Value, Total Profit amount and %, Invested amount and %, Total Cash amount and %, Dividends amount and %, all Portfolio Allocation chart values and percentages, all Upcoming Dividends amounts
+- Analytics: Current Value, Invested, all profit/yield amounts and percentages, all chart axis labels and values, all tooltip values, IRR, Holdings IRR, Portfolio TWR values, all bar chart values
+- Dividend Calendar: all Amount column values in List view, all dividend amounts on calendar tiles, all values in the dividend detail sheet
+- Portfolio: Total Portfolio Value, Invested, Total Profit, Current Value, Total Cash, Dividends, all asset current values and percentages in the Holdings list, all values in the asset detail (In Portfolio, Returns, General sections)
+
+**Display behavior when hidden:** Replace every numerical value with `••••` or `****`. Currency symbols and labels (e.g. "CURRENT VALUE", "Total Profit") remain visible. Only the numbers themselves are masked.
+
+**Toggle behavior:**
+- Eye icon open (default) = numbers visible
+- Eye icon closed/crossed = numbers hidden with `••••`
+- The toggle state must persist across tab switches and app restarts (save to AsyncStorage)
+- A single tap on the eye icon flips the state globally — one toggle controls everything
+
+**4.2 Theme Selector — Dropdown Menu**
+
+Replace the current theme toggle (System / Light / Dark icons in the header) with a **dropdown menu**.
+
+**Behavior:**
+- The existing theme icon in the header becomes a tappable button
+- Tapping it opens a small dropdown menu anchored below the icon with three options listed vertically:
+  - System (top option)
+  - Light (middle option)
+  - Dark (bottom option)
+- The currently active option has a checkmark or highlight indicator
+- Tapping an option applies that theme immediately and closes the dropdown
+- Tapping anywhere outside the dropdown closes it without changing the theme
+- The selected theme persists across app restarts (already implemented — just change the UI trigger to a dropdown)
+
+**4.3 Remove Email Verification Code on Login**
+
+Remove the step that sends a verification code to the user's email during login.
+
+**Fix:**
+- The login flow must go directly from credentials entry (email + password) to the authenticated app without any email code verification step
+- Remove the verification code input screen/modal entirely
+- Remove any backend call that sends or validates the email verification code
+- If the verification was implemented as a middleware or auth guard, remove that layer
+- Standard session/token authentication remains — only the additional email code step is removed
+- Do not change anything else about the login flow, session management, or logout behavior
+
+---
+
+**GLOBAL REQUIREMENTS**
+- Section 1: Calculation fixes only where specified — no unintended side effects on other metrics
+- Section 2: Add Edit/Delete to dividend detail only — do not change any other part of the calendar
+- Section 3: Holdings list and count fix — no changes to any calculations
+- Section 4: Pure UI/UX/behavior changes — no changes to financial logic
+- All changes must be independently testable without breaking adjacent functionality
+- No runtime errors; wrap all new async operations in error handling with graceful fallbacks

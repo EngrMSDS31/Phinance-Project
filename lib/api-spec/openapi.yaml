@@ -1,0 +1,1771 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: Multi-market investment portfolio tracker API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: portfolios
+    description: Portfolio management
+  - name: holdings
+    description: Holdings within portfolios
+  - name: transactions
+    description: Transaction records
+  - name: watchlists
+    description: Watchlists and watchlist items
+  - name: alerts
+    description: Price alerts
+  - name: notifications
+    description: Notification center
+  - name: prices
+    description: Price data
+  - name: dividends
+    description: Dividend calendar
+  - name: dashboard
+    description: Dashboard aggregates
+  - name: csv
+    description: CSV import/export
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  # ── PORTFOLIOS ────────────────────────────────────────────────────────────────
+  /portfolios:
+    get:
+      operationId: listPortfolios
+      tags: [portfolios]
+      summary: List all portfolios for the current user
+      responses:
+        "200":
+          description: List of portfolios
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Portfolio"
+    post:
+      operationId: createPortfolio
+      tags: [portfolios]
+      summary: Create a new portfolio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PortfolioInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Portfolio"
+
+  /portfolios/{portfolioId}:
+    get:
+      operationId: getPortfolio
+      tags: [portfolios]
+      summary: Get a single portfolio
+      parameters:
+        - name: portfolioId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Portfolio
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Portfolio"
+        "404":
+          description: Not found
+    patch:
+      operationId: updatePortfolio
+      tags: [portfolios]
+      summary: Update a portfolio
+      parameters:
+        - name: portfolioId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PortfolioUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Portfolio"
+    delete:
+      operationId: deletePortfolio
+      tags: [portfolios]
+      summary: Delete a portfolio
+      parameters:
+        - name: portfolioId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /portfolios/{portfolioId}/summary:
+    get:
+      operationId: getPortfolioSummary
+      tags: [portfolios]
+      summary: Get portfolio summary (current value, gain/loss, cash, dividends)
+      parameters:
+        - name: portfolioId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Portfolio summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortfolioSummary"
+
+  /portfolios/{portfolioId}/performance:
+    get:
+      operationId: getPortfolioPerformance
+      tags: [portfolios]
+      summary: Get historical performance data points for charting
+      parameters:
+        - name: portfolioId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [1M, 3M, 6M, 1Y, ALL]
+            default: 1Y
+      responses:
+        "200":
+          description: Performance data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PerformancePoint"
+
+  # ── HOLDINGS ──────────────────────────────────────────────────────────────────
+  /portfolios/{portfolioId}/holdings:
+    get:
+      operationId: listHoldings
+      tags: [holdings]
+      summary: List holdings in a portfolio
+      parameters:
+        - name: portfolioId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Holdings list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Holding"
+    post:
+      operationId: createHolding
+      tags: [holdings]
+      summary: Create a holding (typically auto-created via transactions)
+      parameters:
+        - name: portfolioId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HoldingInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Holding"
+
+  /portfolios/{portfolioId}/holdings/{holdingId}:
+    get:
+      operationId: getHolding
+      tags: [holdings]
+      summary: Get a holding with performance details
+      parameters:
+        - name: portfolioId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: holdingId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Holding
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Holding"
+    patch:
+      operationId: updateHolding
+      tags: [holdings]
+      summary: Update a holding (e.g. custom name, target weight)
+      parameters:
+        - name: portfolioId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: holdingId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HoldingUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Holding"
+    delete:
+      operationId: deleteHolding
+      tags: [holdings]
+      summary: Delete a holding
+      parameters:
+        - name: portfolioId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: holdingId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ── TRANSACTIONS ──────────────────────────────────────────────────────────────
+  /portfolios/{portfolioId}/transactions:
+    get:
+      operationId: listTransactions
+      tags: [transactions]
+      summary: List transactions in a portfolio
+      parameters:
+        - name: portfolioId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: type
+          in: query
+          schema:
+            type: string
+        - name: holdingId
+          in: query
+          schema:
+            type: ["integer", "null"]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        "200":
+          description: Transaction list with pagination
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransactionList"
+    post:
+      operationId: createTransaction
+      tags: [transactions]
+      summary: Create a transaction
+      parameters:
+        - name: portfolioId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransactionInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transaction"
+
+  /portfolios/{portfolioId}/transactions/{transactionId}:
+    get:
+      operationId: getTransaction
+      tags: [transactions]
+      summary: Get a single transaction
+      parameters:
+        - name: portfolioId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: transactionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Transaction
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transaction"
+    patch:
+      operationId: updateTransaction
+      tags: [transactions]
+      summary: Update a transaction
+      parameters:
+        - name: portfolioId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: transactionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransactionUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transaction"
+    delete:
+      operationId: deleteTransaction
+      tags: [transactions]
+      summary: Delete a transaction
+      parameters:
+        - name: portfolioId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: transactionId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /portfolios/{portfolioId}/transactions/batch-delete:
+    post:
+      operationId: batchDeleteTransactions
+      tags: [transactions]
+      summary: Delete multiple transactions at once
+      parameters:
+        - name: portfolioId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchDeleteInput"
+      responses:
+        "200":
+          description: Deleted count
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchDeleteResult"
+
+  # ── CSV IMPORT / EXPORT ───────────────────────────────────────────────────────
+  /portfolios/{portfolioId}/csv/import:
+    post:
+      operationId: importCsv
+      tags: [csv]
+      summary: Import transactions from CSV text
+      parameters:
+        - name: portfolioId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CsvImportInput"
+      responses:
+        "200":
+          description: Import result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CsvImportResult"
+
+  /portfolios/{portfolioId}/csv/export:
+    get:
+      operationId: exportCsv
+      tags: [csv]
+      summary: Export transactions as CSV text
+      parameters:
+        - name: portfolioId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: CSV content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CsvExportResult"
+
+  # ── WATCHLISTS ────────────────────────────────────────────────────────────────
+  /watchlists:
+    get:
+      operationId: listWatchlists
+      tags: [watchlists]
+      summary: List all watchlists
+      responses:
+        "200":
+          description: Watchlists
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Watchlist"
+    post:
+      operationId: createWatchlist
+      tags: [watchlists]
+      summary: Create a watchlist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WatchlistInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Watchlist"
+
+  /watchlists/{watchlistId}:
+    patch:
+      operationId: updateWatchlist
+      tags: [watchlists]
+      summary: Rename a watchlist
+      parameters:
+        - name: watchlistId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WatchlistUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Watchlist"
+    delete:
+      operationId: deleteWatchlist
+      tags: [watchlists]
+      summary: Delete a watchlist
+      parameters:
+        - name: watchlistId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /watchlists/{watchlistId}/items:
+    get:
+      operationId: listWatchlistItems
+      tags: [watchlists]
+      summary: List items in a watchlist
+      parameters:
+        - name: watchlistId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WatchlistItem"
+    post:
+      operationId: addWatchlistItem
+      tags: [watchlists]
+      summary: Add a symbol to a watchlist
+      parameters:
+        - name: watchlistId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WatchlistItemInput"
+      responses:
+        "201":
+          description: Added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WatchlistItem"
+
+  /watchlists/{watchlistId}/items/{itemId}:
+    delete:
+      operationId: removeWatchlistItem
+      tags: [watchlists]
+      summary: Remove an item from a watchlist
+      parameters:
+        - name: watchlistId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: itemId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Removed
+
+  # ── PRICE ALERTS ──────────────────────────────────────────────────────────────
+  /alerts:
+    get:
+      operationId: listAlerts
+      tags: [alerts]
+      summary: List all price alerts
+      responses:
+        "200":
+          description: Alerts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PriceAlert"
+    post:
+      operationId: createAlert
+      tags: [alerts]
+      summary: Create a price alert
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PriceAlertInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PriceAlert"
+
+  /alerts/{alertId}:
+    patch:
+      operationId: updateAlert
+      tags: [alerts]
+      summary: Update or dismiss an alert
+      parameters:
+        - name: alertId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PriceAlertUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PriceAlert"
+    delete:
+      operationId: deleteAlert
+      tags: [alerts]
+      summary: Delete a price alert
+      parameters:
+        - name: alertId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ── NOTIFICATIONS ─────────────────────────────────────────────────────────────
+  /notifications:
+    get:
+      operationId: listNotifications
+      tags: [notifications]
+      summary: List notifications (newest first)
+      parameters:
+        - name: unreadOnly
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Notifications
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationList"
+    delete:
+      operationId: clearAllNotifications
+      tags: [notifications]
+      summary: Clear all notifications
+      responses:
+        "204":
+          description: Cleared
+
+  /notifications/{notificationId}:
+    patch:
+      operationId: updateNotification
+      tags: [notifications]
+      summary: Mark notification read/unread or archive it
+      parameters:
+        - name: notificationId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notification"
+    delete:
+      operationId: deleteNotification
+      tags: [notifications]
+      summary: Delete a single notification
+      parameters:
+        - name: notificationId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /notifications/mark-all-read:
+    post:
+      operationId: markAllNotificationsRead
+      tags: [notifications]
+      summary: Mark all notifications as read
+      responses:
+        "200":
+          description: Marked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchDeleteResult"
+
+  # ── PRICES ────────────────────────────────────────────────────────────────────
+  /prices:
+    get:
+      operationId: getPrices
+      tags: [prices]
+      summary: Fetch current prices for a list of symbols
+      parameters:
+        - name: symbols
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Comma-separated list of symbol:market pairs e.g. AAPL:US,BTC:CRYPTO,TEL:PSE
+      responses:
+        "200":
+          description: Price map
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PriceQuote"
+
+  /prices/search:
+    get:
+      operationId: searchSymbols
+      tags: [prices]
+      summary: Search for symbols by query string
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: market
+          in: query
+          schema:
+            type: string
+            enum: [PSE, LSE, US, CRYPTO, CUSTOM]
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SymbolSearchResult"
+
+  # ── DIVIDEND CALENDAR ─────────────────────────────────────────────────────────
+  /dividend-calendar:
+    get:
+      operationId: listDividendEvents
+      tags: [dividends]
+      summary: List dividend calendar entries
+      parameters:
+        - name: portfolioId
+          in: query
+          schema:
+            type: ["integer", "null"]
+        - name: from
+          in: query
+          schema:
+            type: ["string", "null"]
+          description: ISO date
+        - name: to
+          in: query
+          schema:
+            type: ["string", "null"]
+          description: ISO date
+      responses:
+        "200":
+          description: Dividend events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DividendEvent"
+    post:
+      operationId: createDividendEvent
+      tags: [dividends]
+      summary: Create a dividend calendar entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DividendEventInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DividendEvent"
+
+  /dividend-calendar/{eventId}:
+    patch:
+      operationId: updateDividendEvent
+      tags: [dividends]
+      summary: Update a dividend calendar entry
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DividendEventUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DividendEvent"
+    delete:
+      operationId: deleteDividendEvent
+      tags: [dividends]
+      summary: Delete a dividend calendar entry
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  # ── DASHBOARD ─────────────────────────────────────────────────────────────────
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Consolidated summary across all portfolios
+      parameters:
+        - name: targetCurrency
+          in: query
+          required: false
+          schema:
+            type: string
+            default: "USD"
+          description: Currency to aggregate all portfolio values into (uses FX conversion)
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
+  /dashboard/allocation:
+    get:
+      operationId: getDashboardAllocation
+      tags: [dashboard]
+      summary: Allocation breakdown by portfolio and asset class
+      parameters:
+        - name: targetCurrency
+          in: query
+          required: false
+          schema:
+            type: string
+            default: "USD"
+          description: Currency to aggregate all portfolio values into (uses FX conversion)
+      responses:
+        "200":
+          description: Allocation data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AllocationSlice"
+
+  /dashboard/upcoming-dividends:
+    get:
+      operationId: getUpcomingDividends
+      tags: [dashboard]
+      summary: Upcoming dividends across all portfolios (next 30 days)
+      responses:
+        "200":
+          description: Upcoming dividends
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DividendEvent"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required: [status]
+
+    # ── Portfolio ──────────────────────────────────────────────────────────────
+    Portfolio:
+      type: object
+      required: [id, userId, name, baseCurrency, type, defaultFeeRate, sellFeeRate, defaultTaxRate, cashBalance, createdAt]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: string
+        name:
+          type: string
+        baseCurrency:
+          type: string
+          description: ISO currency code e.g. PHP, USD, GBP
+        type:
+          type: string
+          enum: [PSE, LSE, US, CRYPTO, CUSTOM, BONDS, FUNDS, MIXED]
+        defaultFeeRate:
+          type: number
+          description: Buy fee rate as percentage (e.g. 0.295 means 0.295%)
+        sellFeeRate:
+          type: number
+          description: Sell fee and tax rate as percentage (e.g. 0.295 means 0.295%)
+        defaultTaxRate:
+          type: number
+          description: Dividend withholding tax rate as percentage (e.g. 10 means 10%)
+        cashBalance:
+          type: number
+        notes:
+          type: ["string", "null"]
+        color:
+          type: ["string", "null"]
+          description: Hex color code for this portfolio (e.g. "#3b82f6")
+        createdAt:
+          type: string
+
+    PortfolioInput:
+      type: object
+      required: [name, baseCurrency, type]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        baseCurrency:
+          type: string
+        type:
+          type: string
+          enum: [PSE, LSE, US, CRYPTO, CUSTOM, BONDS, FUNDS, MIXED]
+        defaultFeeRate:
+          type: number
+          default: 0
+        sellFeeRate:
+          type: number
+          default: 0
+        defaultTaxRate:
+          type: number
+          default: 0
+        notes:
+          type: string
+        color:
+          type: ["string", "null"]
+
+    PortfolioUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        baseCurrency:
+          type: string
+        type:
+          type: string
+          enum: [PSE, LSE, US, CRYPTO, CUSTOM, BONDS, FUNDS, MIXED]
+        defaultFeeRate:
+          type: number
+        sellFeeRate:
+          type: number
+        defaultTaxRate:
+          type: number
+        notes:
+          type: ["string", "null"]
+        color:
+          type: ["string", "null"]
+
+    PortfolioSummary:
+      type: object
+      required: [portfolioId, totalValue, costBasis, unrealizedGain, unrealizedGainPct, cashBalance, totalDividends, holdingCount]
+      properties:
+        portfolioId:
+          type: integer
+        totalValue:
+          type: number
+        costBasis:
+          type: number
+        unrealizedGain:
+          type: number
+        unrealizedGainPct:
+          type: number
+        cashBalance:
+          type: number
+        totalDividends:
+          type: number
+        holdingCount:
+          type: integer
+        monthlyDividends:
+          type: number
+        netDeposited:
+          type: number
+          description: Sum of DEPOSIT transactions minus sum of WITHDRAWAL transactions
+        realizedGain:
+          type: number
+          description: Net gain from completed SELL transactions
+        capitalGains:
+          type: number
+          description: Unrealized gain + realized gain
+        dividendIncome:
+          type: number
+          description: Sum of all DIVIDEND type transactions
+        cashGains:
+          type: number
+          description: Sum of all CASH_GAIN type transactions
+        totalGains:
+          type: number
+          description: Capital gains + dividend income + cash gains
+        totalGainsPct:
+          type: number
+          description: Total gains as percentage of net deposited
+
+    PerformancePoint:
+      type: object
+      required: [date, value]
+      properties:
+        date:
+          type: string
+        value:
+          type: number
+        cashBalance:
+          type: number
+
+    DashboardSummary:
+      type: object
+      required: [totalValue, totalCostBasis, totalUnrealizedGain, totalUnrealizedGainPct, totalCash, totalDividends, portfolioCount, holdingCount, unreadNotifications, activeAlerts]
+      properties:
+        totalValue:
+          type: number
+        totalCostBasis:
+          type: number
+        totalUnrealizedGain:
+          type: number
+        totalUnrealizedGainPct:
+          type: number
+        totalCash:
+          type: number
+        totalDividends:
+          type: number
+        portfolioCount:
+          type: integer
+        holdingCount:
+          type: integer
+        unreadNotifications:
+          type: integer
+        activeAlerts:
+          type: integer
+        monthlyDividends:
+          type: number
+        currency:
+          type: string
+          description: The currency all aggregated values are denominated in
+        totalDeposited:
+          type: number
+          description: Sum of DEPOSIT transactions minus sum of WITHDRAWAL transactions
+        totalRealizedGain:
+          type: number
+          description: Net gain from all completed SELL transactions
+        capitalGains:
+          type: number
+          description: Unrealized gain + realized gain across all portfolios
+        totalGain:
+          type: number
+          description: Capital gains + dividends (from DIVIDEND transactions) + cash gains
+        totalGainPct:
+          type: number
+          description: Total gain as percentage of net deposited
+        totalCashGains:
+          type: number
+          description: Sum of all CASH_GAIN transactions
+
+    AllocationSlice:
+      type: object
+      required: [label, value, pct, type]
+      properties:
+        label:
+          type: string
+        value:
+          type: number
+        pct:
+          type: number
+        type:
+          type: string
+        portfolioId:
+          type: ["integer", "null"]
+        color:
+          type: ["string", "null"]
+
+    # ── Holding ────────────────────────────────────────────────────────────────
+    Holding:
+      type: object
+      required: [id, portfolioId, symbol, name, market, assetType, quantity, avgCostBasis, currentPrice, currentValue, unrealizedGain, unrealizedGainPct, totalDividends, createdAt]
+      properties:
+        id:
+          type: integer
+        portfolioId:
+          type: integer
+        symbol:
+          type: string
+        name:
+          type: string
+        market:
+          type: string
+          enum: [PSE, LSE, US, CRYPTO, CUSTOM]
+        assetType:
+          type: string
+          enum: [STOCK, ETF, FUND, CRYPTO, CUSTOM]
+        quantity:
+          type: number
+        avgCostBasis:
+          type: number
+        currentPrice:
+          type: number
+        currentValue:
+          type: number
+        unrealizedGain:
+          type: number
+        unrealizedGainPct:
+          type: number
+        totalDividends:
+          type: number
+        targetWeight:
+          type: ["number", "null"]
+          description: Target allocation weight as decimal
+        currency:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        isCustom:
+          type: boolean
+        lastPriceUpdate:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    HoldingInput:
+      type: object
+      required: [symbol, name, market, assetType]
+      properties:
+        symbol:
+          type: string
+        name:
+          type: string
+        market:
+          type: string
+          enum: [PSE, LSE, US, CRYPTO, CUSTOM]
+        assetType:
+          type: string
+          enum: [STOCK, ETF, FUND, CRYPTO, CUSTOM]
+        currency:
+          type: string
+        targetWeight:
+          type: number
+        notes:
+          type: string
+        isCustom:
+          type: boolean
+          default: false
+
+    HoldingUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        targetWeight:
+          type: ["number", "null"]
+        notes:
+          type: ["string", "null"]
+        currentPrice:
+          type: number
+          description: Manual price override for custom holdings
+
+    # ── Transaction ────────────────────────────────────────────────────────────
+    Transaction:
+      type: object
+      required: [id, portfolioId, type, date, amount, currency, createdAt]
+      properties:
+        id:
+          type: integer
+        portfolioId:
+          type: integer
+        holdingId:
+          type: ["integer", "null"]
+        holdingSymbol:
+          type: ["string", "null"]
+        holdingName:
+          type: ["string", "null"]
+        type:
+          type: string
+          enum: [BUY, SELL, DIVIDEND, STOCK_SPLIT, FEE, TAX, DEPOSIT, WITHDRAWAL, CASH_GAIN, CASH_EXPENSE, COUPON_INTEREST, STAKING_REWARD, MATURITY, TRANSFER, DISTRIBUTION, FUND_TRANSFER_IN, FUND_TRANSFER_OUT]
+        date:
+          type: string
+        quantity:
+          type: ["number", "null"]
+        price:
+          type: ["number", "null"]
+        amount:
+          type: number
+          description: Total transaction amount in portfolio base currency
+        feeAmount:
+          type: ["number", "null"]
+        taxAmount:
+          type: ["number", "null"]
+        feeRate:
+          type: ["number", "null"]
+        taxRate:
+          type: ["number", "null"]
+        currency:
+          type: string
+        notes:
+          type: ["string", "null"]
+        linkedTransactionId:
+          type: ["integer", "null"]
+          description: For cash moves between portfolios
+        createdAt:
+          type: string
+
+    TransactionInput:
+      type: object
+      required: [type, date, amount, currency]
+      properties:
+        holdingId:
+          type: ["integer", "null"]
+          description: Existing holding ID. Omit (or pass null) together with symbol+market to auto-create the holding.
+        symbol:
+          type: string
+          description: Ticker symbol — used with market/name to auto-create a holding when holdingId is not provided
+        market:
+          type: string
+          enum: [PSE, LSE, US, CRYPTO, CUSTOM]
+        name:
+          type: string
+          description: Display name for auto-created holding
+        assetType:
+          type: string
+          enum: [STOCK, ETF, FUND, CRYPTO, CUSTOM]
+        type:
+          type: string
+          enum: [BUY, SELL, DIVIDEND, STOCK_SPLIT, FEE, TAX, DEPOSIT, WITHDRAWAL, CASH_GAIN, CASH_EXPENSE, COUPON_INTEREST, STAKING_REWARD, MATURITY, TRANSFER, DISTRIBUTION, FUND_TRANSFER_IN, FUND_TRANSFER_OUT]
+        date:
+          type: string
+        quantity:
+          type: number
+        price:
+          type: number
+        amount:
+          type: number
+        feeAmount:
+          type: number
+        taxAmount:
+          type: number
+        feeRate:
+          type: number
+        taxRate:
+          type: number
+        currency:
+          type: string
+        notes:
+          type: string
+        linkedTransactionId:
+          type: ["integer", "null"]
+
+    TransactionUpdate:
+      type: object
+      properties:
+        holdingId:
+          type: ["integer", "null"]
+        type:
+          type: string
+          enum: [BUY, SELL, DIVIDEND, STOCK_SPLIT, FEE, TAX, DEPOSIT, WITHDRAWAL, CASH_GAIN, CASH_EXPENSE, COUPON_INTEREST, STAKING_REWARD, MATURITY, TRANSFER, DISTRIBUTION, FUND_TRANSFER_IN, FUND_TRANSFER_OUT]
+        date:
+          type: string
+        quantity:
+          type: ["number", "null"]
+        price:
+          type: ["number", "null"]
+        amount:
+          type: number
+        feeAmount:
+          type: ["number", "null"]
+        taxAmount:
+          type: ["number", "null"]
+        feeRate:
+          type: ["number", "null"]
+        taxRate:
+          type: ["number", "null"]
+        currency:
+          type: string
+        notes:
+          type: ["string", "null"]
+
+    TransactionList:
+      type: object
+      required: [items, total, page, limit]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Transaction"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    BatchDeleteInput:
+      type: object
+      required: [ids]
+      properties:
+        ids:
+          type: array
+          items:
+            type: integer
+
+    BatchDeleteResult:
+      type: object
+      required: [count]
+      properties:
+        count:
+          type: integer
+
+    # ── CSV ────────────────────────────────────────────────────────────────────
+    CsvImportInput:
+      type: object
+      required: [csvContent]
+      properties:
+        csvContent:
+          type: string
+        dryRun:
+          type: boolean
+          default: false
+
+    CsvImportResult:
+      type: object
+      required: [imported, skipped, errors]
+      properties:
+        imported:
+          type: integer
+        skipped:
+          type: integer
+        errors:
+          type: array
+          items:
+            type: string
+
+    CsvExportResult:
+      type: object
+      required: [csvContent, filename]
+      properties:
+        csvContent:
+          type: string
+        filename:
+          type: string
+
+    # ── Watchlist ──────────────────────────────────────────────────────────────
+    Watchlist:
+      type: object
+      required: [id, userId, name, market, itemCount, createdAt]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: string
+        name:
+          type: string
+        market:
+          type: string
+          enum: [PSE, LSE, US, CRYPTO, MIXED]
+        itemCount:
+          type: integer
+        createdAt:
+          type: string
+
+    WatchlistInput:
+      type: object
+      required: [name, market]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        market:
+          type: string
+          enum: [PSE, LSE, US, CRYPTO, MIXED]
+
+    WatchlistUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        market:
+          type: string
+          enum: [PSE, LSE, US, CRYPTO, MIXED]
+
+    WatchlistItem:
+      type: object
+      required: [id, watchlistId, symbol, name, market, currentPrice, createdAt]
+      properties:
+        id:
+          type: integer
+        watchlistId:
+          type: integer
+        symbol:
+          type: string
+        name:
+          type: string
+        market:
+          type: string
+          enum: [PSE, LSE, US, CRYPTO, CUSTOM]
+        currentPrice:
+          type: number
+        priceChange:
+          type: number
+        priceChangePct:
+          type: number
+        currency:
+          type: ["string", "null"]
+        lastUpdated:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    WatchlistItemInput:
+      type: object
+      required: [symbol, name, market]
+      properties:
+        symbol:
+          type: string
+        name:
+          type: string
+        market:
+          type: string
+          enum: [PSE, LSE, US, CRYPTO, CUSTOM]
+        currency:
+          type: string
+
+    # ── Price Alert ────────────────────────────────────────────────────────────
+    PriceAlert:
+      type: object
+      required: [id, userId, symbol, market, name, condition, targetPrice, status, createdAt]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: string
+        symbol:
+          type: string
+        market:
+          type: string
+          enum: [PSE, LSE, US, CRYPTO, CUSTOM]
+        name:
+          type: string
+        condition:
+          type: string
+          enum: [GTE, LTE, EQ, CROSS_UP, CROSS_DOWN]
+        targetPrice:
+          type: number
+        currentPrice:
+          type: ["number", "null"]
+        status:
+          type: string
+          enum: [PENDING, FIRED, CLEARED, DISMISSED]
+        currency:
+          type: ["string", "null"]
+        firedAt:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    PriceAlertInput:
+      type: object
+      required: [symbol, market, name, condition, targetPrice]
+      properties:
+        symbol:
+          type: string
+        market:
+          type: string
+          enum: [PSE, LSE, US, CRYPTO, CUSTOM]
+        name:
+          type: string
+        condition:
+          type: string
+          enum: [GTE, LTE, EQ, CROSS_UP, CROSS_DOWN]
+        targetPrice:
+          type: number
+        currency:
+          type: string
+
+    PriceAlertUpdate:
+      type: object
+      properties:
+        condition:
+          type: string
+          enum: [GTE, LTE, EQ, CROSS_UP, CROSS_DOWN]
+        targetPrice:
+          type: number
+        status:
+          type: string
+          enum: [PENDING, FIRED, CLEARED, DISMISSED]
+
+    # ── Notification ───────────────────────────────────────────────────────────
+    Notification:
+      type: object
+      required: [id, userId, type, title, message, isRead, createdAt]
+      properties:
+        id:
+          type: integer
+        userId:
+          type: string
+        type:
+          type: string
+          enum: [PRICE_ALERT, DIVIDEND_REMINDER, SYSTEM]
+        title:
+          type: string
+        message:
+          type: string
+        isRead:
+          type: boolean
+        isArchived:
+          type: boolean
+        referenceId:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+
+    NotificationUpdate:
+      type: object
+      properties:
+        isRead:
+          type: boolean
+        isArchived:
+          type: boolean
+
+    NotificationList:
+      type: object
+      required: [items, unreadCount]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Notification"
+        unreadCount:
+          type: integer
+
+    # ── Price ──────────────────────────────────────────────────────────────────
+    PriceQuote:
+      type: object
+      required: [symbol, market, price, currency]
+      properties:
+        symbol:
+          type: string
+        market:
+          type: string
+        price:
+          type: number
+        currency:
+          type: string
+        priceChange:
+          type: ["number", "null"]
+        priceChangePct:
+          type: ["number", "null"]
+        lastUpdated:
+          type: string
+        source:
+          type: ["string", "null"]
+        isStale:
+          type: boolean
+
+    SymbolSearchResult:
+      type: object
+      required: [symbol, name, market, currency]
+      properties:
+        symbol:
+          type: string
+        name:
+          type: string
+        market:
+          type: string
+        currency:
+          type: string
+        exchange:
+          type: ["string", "null"]
+
+    # ── Dividend Calendar ──────────────────────────────────────────────────────
+    DividendEvent:
+      type: object
+      required: [id, portfolioId, holdingId, symbol, name, dividendType, exDate, totalAmount, currency, createdAt]
+      properties:
+        id:
+          type: integer
+        portfolioId:
+          type: integer
+        holdingId:
+          type: integer
+        symbol:
+          type: string
+        name:
+          type: string
+        dividendType:
+          type: string
+          enum: [ORDINARY, SPECIAL, STOCK, RETURN_OF_CAPITAL]
+        exDate:
+          type: string
+        recordDate:
+          type: ["string", "null"]
+        paymentDate:
+          type: ["string", "null"]
+        dividendPerShare:
+          type: ["number", "null"]
+        quantity:
+          type: ["number", "null"]
+        grossAmount:
+          type: ["number", "null"]
+        taxAmount:
+          type: ["number", "null"]
+        totalAmount:
+          type: number
+        currency:
+          type: string
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    DividendEventInput:
+      type: object
+      required: [portfolioId, holdingId, dividendType, exDate, totalAmount, currency]
+      properties:
+        portfolioId:
+          type: integer
+        holdingId:
+          type: integer
+        dividendType:
+          type: string
+          enum: [ORDINARY, SPECIAL, STOCK, RETURN_OF_CAPITAL]
+        exDate:
+          type: string
+        recordDate:
+          type: string
+        paymentDate:
+          type: string
+        dividendPerShare:
+          type: number
+        totalAmount:
+          type: number
+        currency:
+          type: string
+        notes:
+          type: string
+
+    DividendEventUpdate:
+      type: object
+      properties:
+        dividendType:
+          type: string
+          enum: [ORDINARY, SPECIAL, STOCK, RETURN_OF_CAPITAL]
+        exDate:
+          type: string
+        recordDate:
+          type: ["string", "null"]
+        paymentDate:
+          type: ["string", "null"]
+        dividendPerShare:
+          type: ["number", "null"]
+        totalAmount:
+          type: number
+        notes:
+          type: ["string", "null"]

@@ -1,0 +1,138 @@
+**Critical Bug Fixes & UI Follow-Up (Priority Order)**
+
+Please implement all three priorities below in order of importance. These are follow-ups from the previous prompt that were not fully implemented.
+
+---
+
+**PRIORITY 1 — CRITICAL BUG: Edit & Delete Broken for All Transaction Types**
+
+This is the most important fix. Currently, editing and deleting transactions fails in multiple places across the app. This must work universally without exception.
+
+**The rule is absolute:** Every single transaction record in the app — regardless of type, source, portfolio, or market — must be fully editable and deletable by the user.
+
+**Scope — applies to ALL of the following without exception:**
+- All transaction types: Buy, Sell, Dividend, Deposit, Withdrawal, Other Income, Other Expenses
+- All portfolio types: Regular stock portfolios, Custom portfolios, Fund portfolios, Bond portfolios, Mixed portfolios
+- All markets: PSE, US, LSE, and any Custom/Fund/Bond/Mixed markets
+- All import methods: Manually entered transactions AND CSV-imported transactions
+- All locations where transactions appear: Portfolio Transactions list, Dividend Calendar View, Dividend Calendar List View, and any other screen that shows transaction records
+
+**Root cause investigation — check all of the following:**
+
+1. **Missing transaction ID:** Some transactions (especially imported ones or custom asset transactions) may not have a properly stored `id` field. Without an ID, the edit/delete API call has nothing to reference and silently fails or returns an error. Fix: ensure every transaction saved to the database has a unique ID, and that the ID is passed correctly in all edit/delete requests.
+
+2. **Wrong API endpoint or method:** The edit/delete calls may be hitting the wrong route for certain transaction types (e.g. dividend transactions may use a different endpoint than buy/sell). Fix: verify that the correct endpoint is called for each transaction type, and that HTTP method (PUT/PATCH for edit, DELETE for delete) is correct.
+
+3. **Schema mismatch on save:** The edit form may be sending fields that don't match the database schema for certain transaction types (as seen with the MP2 "Failed to update" error). Fix: ensure the payload sent on save maps correctly to the stored schema for every transaction type, including custom/fund/bond transactions which may have different field names.
+
+4. **Read-only flag on imported transactions:** Some apps mark imported transactions as read-only. If this exists, remove it entirely. No transaction should ever be locked from editing or deletion.
+
+5. **Missing error handling:** Wrap every edit and delete operation in proper try/catch. If an operation fails, show a specific error message explaining what went wrong (not just "Failed to update"). Log the full error to the console for debugging.
+
+**After fixing, verify these specific cases work:**
+- Edit a manually added Buy transaction in a stock portfolio → save successfully
+- Edit a CSV-imported Dividend transaction → save successfully
+- Edit an MP2 custom portfolio Dividend transaction → save successfully (the "Failed to update" bug)
+- Delete any transaction in the Dividend Calendar List View → deleted and UI refreshes
+- Delete any transaction in the Dividend Calendar View (Calendar) → deleted and calendar refreshes
+- Edit/Delete a transaction in a Fund, Bond, or Custom market portfolio → works correctly
+- After any edit or delete, all affected portfolio metrics (Total Profit, Current Value, Dividends, etc.) recompute and reflect the change immediately
+
+---
+
+**PRIORITY 2 — UNIFIED TRANSACTION WINDOW: Apply to All Remaining Entry Points**
+
+The correct unified transaction window (with proper layout, summary section with +/− signs, "Add Transaction" / "Edit Transaction" title, Net Amount display) is currently only working inside the Portfolio Section Transactions list. It must be applied to all remaining entry points.
+
+**Remaining entry points that still need the unified window:**
+
+**A. Dashboard → "+ Add Transaction" button (mobile view)**
+- Tapping "+ Add Transaction" on Dashboard must open the same unified window
+- Title: "Add Transaction"
+- All transaction types available in the Type dropdown
+- Full layout: Type, Date, Stock/Symbol, Market, Quantity, Price/Share, Fee, Tax, Currency, Summary section (Gross/Fee/Net with correct signs), Notes, Add Transaction button
+
+**B. Dividend Calendar — Calendar View → Edit Transaction**
+- When the user taps a dividend event in Calendar View, opens the detail sheet, then taps Edit → must open the unified "Edit Transaction" window
+- Pre-populate all fields from the existing transaction record
+- Title: "Edit Transaction"
+- Save button: "Save Changes"
+- Must save successfully (connects to Priority 1 fix)
+
+**C. Dividend Calendar — List View → Edit Transaction**
+- When the user taps a dividend record in List View, opens the detail sheet, then taps Edit → must open the unified "Edit Transaction" window
+- Pre-populate all fields from the existing transaction record
+- Title: "Edit Transaction"
+- Save button: "Save Changes"
+- Must save successfully (connects to Priority 1 fix)
+
+**Summary section sign rules reminder (UI display only, calculations unchanged):**
+
+Buy:
+```
+Gross Amount        ₱X,XXX.XX    (neutral)
++ Buy Fee           +₱XX.XX      (neutral/muted)
+────────────────────────────────
+Net Amount          ₱X,XXX.XX    (green, bold)
+```
+
+Sell:
+```
+Gross Amount        ₱X,XXX.XX    (neutral)
+− Sell Fee          −₱XX.XX      (red)
+− Tax               −₱XX.XX      (red, only if > 0)
+────────────────────────────────
+Net Amount          ₱X,XXX.XX    (green, bold)
+```
+
+Dividend:
+```
+Gross Dividend      ₱X,XXX.XX    (neutral)
+− Withholding Tax   −₱XX.XX      (red)
+────────────────────────────────
+Net Received        ₱X,XXX.XX    (green, bold)
+```
+
+**Transaction Lists — Net Amount consistency:**
+All transaction lists throughout the app (Portfolio Transactions list, Dividend Calendar List) must show Net Amount in the amount column. Never Gross Amount. This must be consistent everywhere.
+
+---
+
+**PRIORITY 3 — DIVIDEND CALENDAR VIEW: Currency Symbol & Amount Display Fix**
+
+Two small but important display fixes for dividend event tiles inside calendar date cells.
+
+**Fix 1 — Currency symbol:**
+- Currently showing the full currency code text (e.g. "PHP") before the amount
+- Replace with the correct currency symbol only:
+  - PHP → ₱
+  - USD → $
+  - GBP → £
+  - EUR → €
+  - Apply the correct symbol for all other currencies available in the app
+- Never show the 3-letter currency code in the calendar tile — symbol only
+
+**Fix 2 — Show full amount, no abbreviation:**
+- Currently amounts may be abbreviated (e.g. ₱1.9k)
+- Show the full amount with 2 decimal places (e.g. ₱1,863.00) always
+- To make it fit, reduce the font size of both the stock symbol text and the amount text by approximately 20% compared to current size
+- Do not truncate or abbreviate the number regardless of its length
+- If the tile is still too small after reducing font size, allow the tile row height to expand slightly to accommodate — do not overflow outside the cell boundary
+
+**Final tile format reminder:**
+```
+┌──────────────┐
+│      16      │  ← date number (unchanged)
+│    TEL       │  ← ticker only, ~20% smaller font than current
+│ ₱1,863.00   │  ← full amount with symbol, ~20% smaller font
+└──────────────┘
+```
+
+---
+
+**GLOBAL REQUIREMENTS**
+- Priority 1 is a critical functional bug — fix the root cause, not just the symptom. Test every transaction type in every portfolio type before marking as done
+- Priority 2 is UI consistency — the unified window must look and function identically across all five entry points
+- Priority 3 is display polish — currency symbol and font size only, no logic changes
+- After all fixes, verify: no "Failed to update" errors, no silent failures, all edits and deletes persist to the database and trigger a full UI refresh of all affected metrics
+- No regression: fixes must not break any currently working edit/delete functionality

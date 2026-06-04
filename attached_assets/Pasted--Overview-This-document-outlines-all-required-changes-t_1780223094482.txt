@@ -1,0 +1,382 @@
+## Overview
+
+This document outlines all required changes to the **Folio** portfolio tracking app. Changes cover 5 major areas: (1) Custom Asset/Holding UI, (2) Dashboard section, (3) Analytics section, (4) Dividend Calendar section, and (5) Portfolio section. Screenshots of the current UI are referenced for each change.
+
+---
+
+## 1. REVISIONS — ADD HOLDING UI & CUSTOM ASSET LOGIC
+
+### 1.1 Redesign the "Add Holding" Modal
+
+**Current state (from screenshot):** The modal has fields for Symbol, Name, Market (dropdown), Asset Type (dropdown: STOCK, ETF, FUND, CRYPTO, CUSTOM), and Currency (plain text input).
+
+**Required changes:**
+
+Replace all existing fields in the "Add Holding" modal with the following new structure:
+
+#### New Fields (in this order):
+
+| Field | Type | Options / Notes |
+|---|---|---|
+| TYPE | Dropdown (required) | Savings Account, Cash, Stocks, Bonds, Cryptocurrencies, ETFs/Funds, Other Custom Assets |
+| NAME | Text input (required) | Free-form name of the asset/holding |
+| CODE | Text input (required) | Short identifier or ticker code (replaces "Symbol") |
+| CURRENCY | Dropdown (required) | Full currency list; default = portfolio's base currency |
+| NOTE | Text area (optional) | Free-form notes about the holding |
+
+**Remove:** "Market" field and the old "Asset Type" field entirely.
+
+---
+
+#### Transaction Type Logic Per Asset Type
+
+Each asset TYPE must restrict which transaction types are available when the user adds a transaction to that holding. Apply this logic **globally** — in every place transactions are added (the "Add Transaction" modal, inline transaction forms, etc.).
+
+| Asset Type | Allowed Transaction Types |
+|---|---|
+| **Savings Account** | Deposit, Withdrawal, Dividend/Interest, Other Income, Other Expenses |
+| **Cash** | Deposit, Withdrawal, Other Income, Other Expenses |
+| **Stocks** | Buy, Sell, Dividend, Stock Split, Other Income, Other Expenses |
+| **Bonds** | Buy, Sell, Coupon/Interest, Maturity, Other Income, Other Expenses |
+| **Cryptocurrencies** | Buy, Sell, Staking Reward, Transfer, Other Income, Other Expenses |
+| **ETFs/Funds** | Buy, Sell, Distribution/Dividend, Other Income, Other Expenses |
+| **Other Custom Assets** | Deposit, Withdrawal, Other Income, Other Expenses |
+
+**Key rule:** For asset types that have **no Buy/Sell** (Savings Account, Cash, Other Custom Assets):
+- There are **no Capital Gains** and **no Realized Gains** calculations for those holdings.
+- They still count as **assets within the portfolio** — they contribute to Total Portfolio Value and Current Value calculations.
+- They are **NOT treated as idle cash** unless explicitly tagged as "Idle Cash" by the user.
+- Their returns are tracked via: Cash Incentive = Sum of (Income transactions) − Sum of (Expense transactions).
+
+**Implementation note for Replit:** Store the `assetType` on each holding record. When the "Add Transaction" modal/form opens for a holding, read its `assetType` and dynamically filter the transaction type dropdown to only show allowed types for that asset type. This filter must apply both on the frontend (UI) and backend (validation).
+
+---
+
+### 1.2 Base Currency Default for All Portfolios
+
+**Rule:** When a portfolio is created, the user sets a **Base Currency**. This base currency must become the default selected currency for every new holding added to that portfolio and every transaction within it.
+
+**Changes required:**
+
+1. On the "Create Portfolio" screen, ensure the Base Currency selector is prominent and required.
+2. When the "Add Holding" modal opens within a portfolio, pre-select the portfolio's base currency in the CURRENCY dropdown.
+3. The user can still override the currency per holding (e.g., a USD-denominated ETF inside a PHP-base portfolio), but the default must always be the portfolio base currency.
+4. Apply this rule to **all portfolio types** — not just custom portfolios. Mixed-type portfolios, stock portfolios, and all others must follow this same default behavior.
+
+---
+
+## 2. DASHBOARD SECTION — UI & CALCULATION CHANGES
+
+### 2.1 Metric Card Logic Changes
+
+The four metric cards on the Dashboard need their **labels and calculation logic** revised as follows.
+
+#### Card 1: "CURRENT VALUE" → Rename to **"TOTAL PORTFOLIO"**
+```
+Total Portfolio = Current Value (assets only) + Total Cash (idle cash)
+```
+- Shows the grand total across all portfolios.
+- Sub-label: Keep "Invested: ₱X" and percentage return as-is.
+
+#### Card 2: "TOTAL PROFIT" → Keep label as **"TOTAL PROFIT"**
+```
+Total Profit = Capital Gain + Realized Gains + Dividends + Cash Incentive
+
+Where:
+  Capital Gain     = Unrealized gain on open positions
+  Realized Gains   = Gain from sold positions
+  Dividends        = All dividend/income transactions in Holdings > Returns
+  Cash Incentive   = (Total Cash Income transactions) − (Total Cash Expense transactions)
+```
+- Sub-label: Keep percentage display.
+
+#### Card 3: "TOTAL CASH" → Rename to **"CURRENT VALUE"**
+```
+Current Value = Total Assets Only (sum of all holdings at current price)
+             — Idle Cash is EXCLUDED from this figure
+```
+- Sub-label: Keep "+X% of total" or show as "+₱X" of portfolio.
+
+#### Card 4: "DIVIDENDS" → Rename to **"TOTAL CASH"**
+```
+Total Cash = Idle Cash only
+           (Cash balances not invested in any asset)
+```
+- Sub-label: Keep "+X% of total" display.
+
+**Summary of card order and new labels:**
+
+| Position | Old Label | New Label | New Calculation |
+|---|---|---|---|
+| Top-left | Current Value | Total Portfolio | Assets + Idle Cash |
+| Top-right | Total Profit | Total Profit | Cap Gain + Realized + Dividends + Cash Incentive |
+| Bottom-left | Total Cash | Current Value | Assets only, no idle cash |
+| Bottom-right | Dividends | Total Cash | Idle cash only |
+
+---
+
+### 2.2 Portfolio Allocation Pie Chart — Add Toggle
+
+**Current state:** Single pie chart showing Current Value allocation by portfolio.
+
+**Required change:** Add a **toggle switch** above or below the pie chart title with two options:
+
+```
+[ Total Portfolio ]  |  [ Current Value ]
+```
+
+**Behavior:**
+- **Total Portfolio view:** Each pie slice = that portfolio's Total Portfolio Value (assets + idle cash) as a proportion of all portfolios combined.
+- **Current Value view:** Each pie slice = that portfolio's Current Value (assets only, no idle cash) as a proportion of all portfolios combined.
+
+**Design rules:**
+- Keep the existing visual style, colors, and legend exactly as-is.
+- The toggle should match the app's existing toggle/tab style (pill-shaped toggle, same dark theme).
+- Default selected state on page load: **Total Portfolio**.
+- The legend values below the chart must update to reflect whichever toggle is active.
+
+---
+
+## 3. ANALYTICS SECTION — UI & CALCULATION CHANGES
+
+### 3.1 Metric Card Changes (All Portfolios view and per-Portfolio view)
+
+#### Card: "CURRENT VALUE"
+```
+Current Value = Total Assets Only
+              — Idle Cash EXCLUDED (same rule as Dashboard)
+```
+No label change needed. Calculation must match Dashboard's "Current Value" card.
+
+---
+
+#### Card: "TOTAL PROFIT"
+```
+Total Profit = Capital Gain + Realized Gains + Dividends + Cash Incentive
+```
+Add **"Cash Incentive"** as a new line item displayed inside the Total Profit card, below Dividends:
+
+```
+Current display:
+  Capital Gain:    −₱41,738.42
+  Realized Gains:  ₱41,552.15
+  Dividends:       ₱46,625.84
+
+New display (add one line):
+  Capital Gain:    −₱41,738.42
+  Realized Gains:  ₱41,552.15
+  Dividends:       ₱46,625.84
+  Cash Incentive:  ₱X,XXX.XX      ← NEW LINE
+```
+
+Cash Incentive = Sum of all income transactions on non-tradable assets (Savings, Cash, Custom) minus sum of all expense transactions on those same assets.
+
+---
+
+#### Card: "DIVIDEND YIELD"
+Add **"Annual Passive Income"** as a new line below "Annual Dividends":
+
+```
+Current display:
+  Yield on Cost:   3.93%
+  Annual Div:      ₱16,527.85
+  Growth (5Y):     +17.6%
+
+New display (add one line):
+  Yield on Cost:   3.93%
+  Annual Div:      ₱16,527.85
+  Annual Passive Income: ₱X,XXX.XX   ← NEW LINE
+  Growth (5Y):     +17.6%
+```
+
+Annual Passive Income = Annual Dividends + annualized Cash Incentive from non-tradable holdings.
+
+---
+
+### 3.2 Charts — No Changes Required
+
+The following charts must remain **exactly as-is** (design, data, behavior):
+- Portfolio Performance (line chart)
+- Asset Allocation (donut chart)
+- Holdings by Value (horizontal bar chart)
+- Unrealized P&L by Holding (horizontal bar chart)
+
+Do not modify these graphs.
+
+---
+
+### 3.3 Dividends Chart — Fix Data Accuracy
+
+**Current issue:** The dividend bar chart (Monthly / Yearly / Asset toggle) is displaying inaccurate values.
+
+**Required fix:**
+
+Each bar in the chart must reflect the **Net Dividend Value** for that period or asset. Net Dividend Value = sum of all dividend/distribution/interest transactions received (after any applicable withholding tax if tracked).
+
+Rules per toggle:
+- **Monthly view:** Each bar = total net dividends received in that calendar month for the selected year. The year selector (← 2026 →) controls which year is shown. All 12 months must always render (bars with zero value show as empty/flat — not hidden).
+- **Yearly view:** Each bar = total net dividends for that calendar year. Show at minimum the last 5 years of data, or all years with data — whichever is greater.
+- **Asset view:** Each bar = total net dividends received from that specific holding/asset, across all time (or the selected year if a year filter is active).
+
+**Verification checklist for Replit:**
+1. Cross-check the total shown in each bar against the raw dividend transaction records.
+2. Ensure currency conversion is applied consistently if holdings are in different currencies (convert to base currency before summing).
+3. Ensure dividends from non-tradable holdings (Savings Account interest, etc.) are included if they are tagged as "Dividend/Interest" transactions.
+
+---
+
+## 4. DIVIDEND CALENDAR SECTION
+
+### 4.1 List View — Remove Ex-Date Column
+
+**Current state (from screenshot):** The List view table has columns: Ex-Date, Pay Date, Stock, Shares, Per Share, Amount. The table overflows horizontally (Amount is cut off).
+
+**Required change:**
+1. **Remove the "Ex-Date" column** entirely from the List view table.
+2. Redistribute column widths so all remaining columns fit within the screen width without horizontal scrolling.
+
+**New column order:**
+```
+Pay Date | Stock | Shares | Per Share | Amount
+```
+
+**Column width guidance (for a ~390px mobile screen):**
+- Pay Date: ~22% width
+- Stock: ~15% width
+- Shares: ~16% width
+- Per Share: ~18% width
+- Amount: ~29% width
+
+Use `table-layout: fixed` and percentage widths on `<th>` elements to enforce this. Amount values should be right-aligned. All text should be clipped with ellipsis if needed — do not let any column wrap or push others off-screen.
+
+**Note:** The Ex-Date data should still be stored/fetched in the backend — only remove it from the List view display. The Calendar view is unaffected.
+
+---
+
+## 5. PORTFOLIO SECTION
+
+### 5.1 Metric Card Changes (Per-Portfolio view)
+
+Same logic as Dashboard — applied per individual portfolio:
+
+#### "TOTAL PORTFOLIO VALUE" card — Keep label, update calculation:
+```
+Total Portfolio Value = Current Value (assets) + Total Cash (idle cash)
+```
+
+#### "TOTAL PROFIT" card — Keep label, update calculation:
+```
+Total Profit = Capital Gain + Realized Gains + Dividends + Cash Incentive
+```
+
+#### "CASH" card — Rename to **"CURRENT VALUE"**, update calculation:
+```
+Current Value = Total Assets Only — Idle Cash excluded
+```
+
+#### "DIVIDENDS" card — Rename to **"TOTAL CASH"**, update calculation:
+```
+Total Cash = Idle Cash only
+```
+
+This mirrors the exact same renaming/recalculation done on the Dashboard (section 2.1 above). The Portfolio section cards must stay in sync with Dashboard logic.
+
+---
+
+### 5.2 Remove All Manual Refresh Buttons
+
+**Current state:** There is a refresh button (circular arrow icon) visible in the Portfolio Holdings search bar area (and possibly elsewhere in the UI).
+
+**Required change:** Remove **all** manual refresh/reload buttons from the entire app UI. This includes:
+- The refresh icon in the Portfolio Holdings filter row
+- Any refresh buttons in other sections (Dashboard, Analytics, Calendar)
+- Any "Reload" or "Sync" buttons that trigger manual data fetches
+
+**Replacement behavior:** All data must refresh automatically when:
+1. The user performs a hard refresh of the whole app (browser/app reload).
+2. The user navigates between sections (tab change triggers a data re-fetch for that section).
+3. A transaction is added/edited/deleted (triggers re-fetch for affected portfolio and dashboard totals).
+4. Price data cache expires (PSE stock prices: see section 5.3).
+
+**Implementation note:** Use a centralized data-fetching layer (React Query, SWR, or equivalent) with automatic revalidation on focus and on mount. Do not require users to manually trigger refreshes.
+
+---
+
+### 5.3 PSE (Philippine Stock Exchange) Price Fetching — Optimize EODHD API Calls
+
+**Current issue:** The app is making excessive EODHD API calls and has an artificial 20-call-per-day limit in the code.
+
+**Required changes:**
+
+#### A. Only fetch prices for active holdings
+```
+Active holding = any stock in the user's portfolio with quantity > 0
+```
+- On app load, compile the list of active PSE stock symbols (holdings where `quantity > 0` and `market = PSE`).
+- Only call the EODHD price endpoint for symbols in this active list.
+- Do **not** fetch prices for: sold-out positions (quantity = 0), watchlist-only items (if any), or any symbol not currently held.
+
+#### B. Cache fetched prices
+- After fetching prices, store them in a server-side cache (Redis, in-memory store, or database field) with a **timestamp**.
+- Cache TTL (time-to-live): **End of trading day** (PSE closes at 3:30 PM Philippine time, GMT+8). After market close, cached prices are valid until the next trading day open (9:30 AM PHT).
+- On subsequent page loads within the same trading session, serve cached prices — do not re-call EODHD.
+- Only invalidate cache and re-fetch when: cache is expired, user explicitly has no cached data (first load), or a new active symbol is added to the portfolio.
+
+#### C. Remove the 20 API call per day limit
+- Find and delete the code that enforces a hard cap of 20 API calls per day.
+- The only rate limiting should be natural (cache-based) — fetch each symbol once per trading day, not artificially capped.
+
+#### D. Fetch only price data
+- When calling EODHD, request **only the fields needed**: `close` (or `adjusted_close`) price, `date`, and `symbol`.
+- Do not request fundamentals, financials, dividend schedules, or other metadata from EODHD unless those are used elsewhere in the app.
+- Use the EODHD **EOD (End of Day) endpoint** or **real-time/live endpoint** depending on subscription tier — confirm with the EODHD API docs which endpoint returns the latest available price.
+
+**Sample optimized fetch logic (pseudocode):**
+```
+function getPSEPrices(activeSymbols):
+  cachedData = cache.get('pse_prices')
+  
+  if cachedData exists AND cachedData.timestamp > lastMarketOpen:
+    return cachedData.prices  // serve from cache
+  
+  // Only fetch active symbols
+  symbolsToFetch = activeSymbols.filter(s => s.market == 'PSE' && s.quantity > 0)
+  
+  // Batch request if EODHD supports it, else loop
+  prices = EODHD.fetchBatch(symbolsToFetch, fields=['close', 'date'])
+  
+  cache.set('pse_prices', { prices, timestamp: now() })
+  return prices
+```
+
+---
+
+## General Notes for Replit
+
+1. **Data consistency:** All calculation changes must update simultaneously. If you change how "Total Profit" is calculated in the Dashboard, the same formula must apply in Analytics and Portfolio sections. Use a single shared utility function (e.g., `calculateTotalProfit(portfolio)`) called from all three sections — do not duplicate calculation logic.
+
+2. **Currency conversion:** All values displayed to the user must be converted to the app's selected base currency (shown in the top bar as "PHP ₱"). This applies to all renamed/recalculated metric cards.
+
+3. **Backward compatibility:** Existing holdings and transactions must not be affected by the Add Holding UI redesign. The new TYPE field should map to existing asset types where possible. Add a migration or default value for existing records that don't have the new TYPE field.
+
+4. **Mobile-first:** All UI changes must be tested on a ~390px wide mobile screen (the primary device from the screenshots). No horizontal overflow. Touch targets minimum 44px.
+
+5. **Dark theme:** All new UI elements (toggles, new card lines, updated labels) must follow the existing dark theme — dark backgrounds, white/light text, green for positive values, red for negative.
+
+6. **Testing checklist before deployment:**
+   - [ ] Add Holding modal shows correct TYPE dropdown with all 7 options
+   - [ ] Transaction type dropdown filters correctly per asset type
+   - [ ] Savings Account holdings show no Buy/Sell options
+   - [ ] Dashboard metric cards show correct labels and values
+   - [ ] Pie chart toggle works and updates legend values
+   - [ ] Analytics Total Profit card shows Cash Incentive line
+   - [ ] Analytics Dividend Yield card shows Annual Passive Income line
+   - [ ] Dividend chart Monthly/Yearly/Asset bars match raw transaction totals
+   - [ ] Calendar List view has no Ex-Date column and fits on screen
+   - [ ] Portfolio metric cards match Dashboard labels and calculations
+   - [ ] No refresh buttons visible anywhere in the UI
+   - [ ] PSE price fetch only queries active holdings
+   - [ ] Cache is used on subsequent loads within the same trading session
+   - [ ] 20-call limit code is removed
+
+---

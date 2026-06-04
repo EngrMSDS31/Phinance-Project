@@ -1,0 +1,552 @@
+# Folio App — Replit Development Instructions (Part 2)
+## Additional Revisions — Analytics, Calendar, Portfolio & Global UI
+
+> This document supplements Part 1. All changes here are based on new screenshots taken after Part 1 changes were partially implemented. Apply all instructions below without breaking existing Part 1 changes.
+
+---
+
+## 1. ANALYTICS SECTION — RECALCULATIONS & FIXES
+
+### 1.1 Metric Card: "CURRENT VALUE"
+
+**New formula:**
+```
+Current Value = Total Assets + Total Profit
+```
+
+Where:
+- **Total Assets** = Sum of (current market price × quantity) for all holdings with quantity > 0, converted to base currency.
+- **Total Profit** = As defined in section 1.2 below (Capital Gain + Realized Gains + Dividends — no Cash Incentive).
+
+Sub-label below the value:
+```
+Invested: ₱X,XXX.XX  (+XX.X%)
+```
+Where:
+- **Invested** = Total Cost = Sum of (average cost per share × current quantity) for all holdings, converted to base currency. This is the actual amount of capital deployed into assets.
+- **P&L %** = (Current Value − Invested) ÷ Invested × 100
+
+> **Note to Replit:** "Invested" here is the total cost basis of currently held positions only — not historical total spent including sold shares. Use: `SUM(holding.avgCost * holding.quantity)` across all holdings.
+
+---
+
+### 1.2 Metric Card: "TOTAL PROFIT"
+
+**Remove "Cash Incentive"** from Total Profit entirely. It must no longer appear in this card anywhere — not as a line item, not in the total calculation.
+
+**New formula:**
+```
+Total Profit = Capital Gain + Realized Gains + Dividends
+```
+
+Where:
+- **Capital Gain** = Sum of (current price − avg cost) × quantity for all open positions (can be negative if unrealized loss).
+- **Realized Gains** = Sum of profit/loss from all fully or partially closed (sold) positions.
+- **Dividends** = Sum of all Net Dividend amounts (Gross Dividend − Withholding Tax) recorded across all dividend/distribution/interest transactions.
+
+Display breakdown inside the card exactly as:
+```
+Capital Gain:    ₱X,XXX.XX   (red if negative, green if positive)
+Realized Gains:  ₱X,XXX.XX   (green)
+Dividends:       ₱X,XXX.XX   (green)
+```
+
+Do NOT add a Cash Incentive line here. That value moves to the Portfolio section's Total Cash card (see Section 3.1 below).
+
+---
+
+### 1.3 Metric Card: "DIVIDEND YIELD" — Verify & Fix All Sub-Values
+
+The following four values in the Dividend Yield card must be calculated correctly. Replit should implement each formula as described:
+
+#### Dividend Yield (headline %)
+```
+Dividend Yield = (Total Annual Dividends ÷ Current Value) × 100
+```
+- Total Annual Dividends = Sum of all net dividends received in the last 12 months (rolling, not calendar year).
+- Current Value = same as card 1 above (Total Assets + Total Profit).
+
+#### Yield on Cost
+```
+Yield on Cost = (Total Annual Dividends ÷ Total Invested Cost) × 100
+```
+- Total Invested Cost = Total Cost (avg cost × quantity summed across all holdings).
+- Total Annual Dividends = same as above (last 12 months net dividends).
+
+#### Annual Passive Income (previously "Annual Div")
+```
+Annual Passive Income = Total Annual Dividends (last 12 months net dividends, in base currency)
+```
+- This is the raw PHP/currency amount, not a percentage.
+- Label it "Annual Passive Income" (rename from "Annual Div").
+
+#### Growth (5Y)
+```
+5-Year Dividend Growth = ((Dividends in most recent year ÷ Dividends 5 years ago) ^ (1/5) − 1) × 100
+```
+- "Most recent year" = last full calendar year with dividend data.
+- "5 years ago" = the calendar year 5 years prior.
+- If fewer than 2 years of dividend data exist: display "N/A" instead of a percentage.
+- If dividends 5 years ago were ₱0: display "N/A" (cannot divide by zero).
+
+> **Verification checklist for Replit:**
+> - Pull the raw dividend transaction records and manually sum the last 12 months. Confirm it matches "Annual Passive Income."
+> - Divide that sum by Current Value — confirm it matches "Dividend Yield %."
+> - Divide that sum by Invested Cost — confirm it matches "Yield on Cost %."
+> - For Growth 5Y: pull yearly totals for the past 5+ years and apply the CAGR formula.
+
+---
+
+### 1.4 Dividends Bar Chart — Fix Values for All Three Toggles
+
+**Current issue:** Bar values are incorrect — they do not match the actual dividend records.
+
+**Required fix — correct formula for each toggle:**
+
+#### Monthly View
+```
+Bar height for Month M = SUM of Net Dividends received in Month M of the selected year
+
+Net Dividend = Gross Dividend Amount − Withholding Tax Amount
+```
+- Source: All transactions of type Dividend / Distribution / Coupon / Interest / Staking Reward within that month.
+- Year is controlled by the ← YYYY → year navigator.
+- All 12 month bars must always render (months with no dividends = bar height 0, not hidden).
+- Convert all amounts to base currency before summing (apply exchange rate at time of transaction).
+
+#### Yearly View
+```
+Bar height for Year Y = SUM of Net Dividends received across all months of Year Y
+```
+- Show at minimum: all years from the earliest dividend transaction to the current year.
+- No year filter needed — show all years with a horizontal scroll if needed, or show last 5–7 years.
+
+#### Asset View
+```
+Bar height for Asset A = SUM of all Net Dividends ever received from Asset A (all time)
+```
+- Group by holding/symbol, not by portfolio.
+- Sort bars descending by total net dividend amount (largest first).
+- If a year filter is active (from the year navigator), apply it: show only dividends from that year per asset.
+
+**Implementation note for Replit:**
+```javascript
+// Pseudocode for net dividend calculation
+function getNetDividend(transaction) {
+  const gross = transaction.totalAmount || (transaction.pricePerShare * transaction.shares);
+  const tax = transaction.withholdingTax || 0;
+  return gross - tax;
+}
+
+// Monthly aggregation
+function getMonthlyDividends(year) {
+  const months = Array(12).fill(0);
+  transactions
+    .filter(t => isDividendType(t) && t.date.getFullYear() === year)
+    .forEach(t => {
+      const month = t.date.getMonth(); // 0-indexed
+      months[month] += convertToBaseCurrency(getNetDividend(t), t.currency, t.date);
+    });
+  return months;
+}
+```
+
+**Verification step:** The sum of all bars in Monthly view for a given year must equal the same year's bar in Yearly view. If they don't match, there is a bug in the aggregation or currency conversion.
+
+---
+
+## 2. DIVIDEND CALENDAR SECTION
+
+### 2.1 Calendar View — Add Edit & Delete to Dividend Records
+
+**Current issue:** Clicking a dividend record in Calendar view shows a read-only detail card (GMA7 ORDINARY example in screenshot) with no edit or delete options. This happens for both imported and manually added dividend transactions.
+
+**Required changes:**
+
+#### A. Add Edit and Delete buttons to the dividend detail popup
+
+The popup that appears when clicking a dividend record in Calendar view must have:
+- An **Edit** button (pencil icon or "Edit" text button)
+- A **Delete** button (trash icon or "Delete" text button, with confirmation dialog)
+
+Position them in the popup header area — e.g., Edit on the left, Delete on the right, or both as icon buttons in the top-right corner next to the existing ✕ close button.
+
+This must work for **all** dividend entries regardless of whether they were imported via CSV/API or manually entered.
+
+#### B. Edit button must open the standard "Add Transaction" / dividend transaction window
+
+**Current wrong behavior:** Clicking edit shows a minimal form with only: Total Amount, Price per Share, Payment Date, Notes.
+
+**Required behavior:** Clicking Edit must open the **full standard dividend transaction modal** — the same window shown in the "Add Transaction" screenshot — with all fields pre-populated from the existing record:
+
+Fields that must appear (pre-filled with existing values):
+- **Type** (dropdown, pre-selected to "Dividend" or appropriate type)
+- **Date** (pre-filled with the transaction date)
+- **Stock / Symbol** (pre-filled with the holding symbol and name)
+- **Dividend Info** (expandable, same as in Add Transaction)
+- **No. of Shares** (pre-filled)
+- **Price per Share** (pre-filled)
+- **Dividend Tax %** (pre-filled, showing calculated withholding tax)
+- **Currency** (pre-filled)
+- **Summary block** (Gross Dividend, Withholding Tax, Net Received — auto-calculated, updates live as user edits fields)
+- **Notes** (pre-filled if any)
+
+The modal should have **"Save Changes"** button (blue, same style as "Add Transaction") and **"Cancel"** button.
+
+#### C. Changes must propagate throughout the app
+
+When the user saves edits to a dividend transaction from Calendar view:
+- The transaction record in the database must update.
+- The Portfolio section's dividend totals must recalculate.
+- The Analytics section's dividend totals and Dividend Yield card must recalculate.
+- The Dividends bar chart must re-render with updated values.
+- The Dashboard's Total Profit card must reflect the change.
+- The Calendar view itself must re-render the updated record (color, amount, date).
+
+When the user deletes a dividend transaction:
+- Same propagation as above — all totals recalculate after deletion.
+- The dividend record disappears from Calendar view and List view.
+- Show a confirmation dialog before deleting: "Delete this dividend transaction? This cannot be undone." with Confirm and Cancel buttons.
+
+---
+
+### 2.2 Calendar View — Fix Dividend Color Status
+
+**Current issue:** Dividend records that are marked "Already Paid" still display in yellow/amber color in the Calendar view grid, as if they are pending.
+
+**Required fix — color logic for calendar event chips:**
+
+| Status | Color in Calendar |
+|---|---|
+| Upcoming / Pending (future ex-date or pay date) | Yellow / Amber |
+| Already Paid (pay date has passed AND transaction is recorded as paid) | Green |
+| Ex-date only (no pay date yet confirmed) | Gray or muted blue |
+
+**Implementation:**
+- The color of each calendar chip must be driven by the `status` field of the dividend record — not by the date alone.
+- When `status === 'paid'` OR `isPaid === true` on the transaction, render the chip in **green** (same green as the "Paid" badge in List view).
+- When `status === 'pending'` or the pay date is in the future, render in **yellow/amber**.
+- This color update must happen automatically when the user marks a dividend as paid (either by editing or by clicking "Already Paid" button in the detail popup).
+
+---
+
+### 2.3 List View — Fix Column Cropping
+
+**Current issue (from screenshot):** Date column shows "05/15/…", Amount shows "₱1,65…", Status shows "Pendi…" — all truncated. The columns are too narrow and text is cut off.
+
+**Required fix:** All text in all columns must be fully visible within the screen width. **No horizontal scrolling.** Use `table-layout: fixed` with percentage widths.
+
+**New column layout (5 columns, ~390px screen):**
+
+| Column | Width | Alignment | Notes |
+|---|---|---|---|
+| Pay Date | 20% | Left | Show as MM/DD/YY (6 chars) or MM/DD format to save space |
+| Stock | 14% | Center | Ticker only (4-6 chars max) |
+| Shares | 14% | Right | Number, no decimals if whole number |
+| Per Share | 15% | Right | 2 decimal places |
+| Amount | 20% | Right | Show in shortened format if needed: ₱1,656 not ₱1,656.00 |
+| Status | 17% | Center | Full word: "Paid" or "Pending" — use colored badge |
+
+**Specific rules:**
+- Date format: Use `MM/DD/YY` (e.g., `05/15/26`) — 8 characters fits in 20%.
+- Amount format: Show without cents if it makes it fit (₱1,656 instead of ₱1,656.00). If still too long, use K notation: ₱24.6K for amounts over ₱9,999.
+- Status badge: "Paid" in green pill, "Pending" in amber pill — short enough to fit in 17%.
+- Do NOT use ellipsis (`…`) on any cell. If text doesn't fit at given width, adjust the format (shorter date, K notation for amounts) until it fits without truncation.
+- Use `font-size: 12px` or `13px` for the table to ensure all content fits at mobile widths.
+- Apply `white-space: nowrap` to all `<td>` elements to prevent wrapping.
+
+---
+
+## 3. PORTFOLIO SECTION
+
+### 3.1 Metric Cards — Reorganize Total Profit and Total Cash Cards
+
+#### "TOTAL PROFIT" card — Remove Cash Incentive
+```
+Total Profit = Capital Gain + Realized Gains + Dividends
+```
+Same rule as Analytics section 1.2 — remove Cash Incentive from Total Profit card entirely.
+
+Display breakdown inside the card:
+```
+Capital Gain:    ₱X,XXX.XX
+Realized Gains:  ₱X,XXX.XX
+Dividends:       ₱X,XXX.XX
++XX.XX%
+```
+
+#### "TOTAL CASH" card — Replace Div Yield with Cash Incentive
+
+**Current display in Total Cash card:** Shows "Div yield: X.XX%"
+
+**New display:**
+```
+TOTAL CASH
+₱XX,XXX.XX
+
+Cash Incentive: +₱X,XXX.XX    ← Replace "Div yield" with this
+```
+
+Where:
+```
+Cash Incentive = SUM(all income transactions on non-tradable assets)
+               − SUM(all expense transactions on non-tradable assets)
+
+Non-tradable assets = Savings Account, Cash, Other Custom Assets
+Income transactions = Deposit, Dividend/Interest, Other Income
+Expense transactions = Withdrawal, Other Expenses
+```
+
+- Display Cash Incentive in green if positive, red if negative.
+- If Cash Incentive is ₱0 or no non-tradable assets exist, show "Cash Incentive: ₱0.00" (don't hide the line).
+- Remove "Div yield" from the Total Cash card completely.
+
+---
+
+### 3.2 Holdings List — Fix "Active Stocks" Toggle
+
+**Current issue:** When "Active Stocks" filter is toggled OFF, only active (quantity > 0) stocks still appear. Holdings with quantity = 0 (fully sold positions) never show regardless of toggle state.
+
+**Required fix:**
+
+The holdings list filter must work as follows:
+
+| Toggle State | What Shows |
+|---|---|
+| Active ON (default) | Only holdings where `quantity > 0` |
+| Active OFF | All holdings including those where `quantity = 0` (sold/closed positions) |
+
+**Implementation:**
+```javascript
+// Filter logic
+function filterHoldings(holdings, activeOnly) {
+  if (activeOnly) {
+    return holdings.filter(h => h.quantity > 0);
+  }
+  return holdings; // show ALL holdings including zero-quantity
+}
+```
+
+- The toggle button label should read "Active" when showing active only, and something like "All" or "Show All" when showing everything, so the user knows what state they're in.
+- Zero-quantity holdings should appear visually dimmed (reduced opacity, e.g. `opacity: 0.6`) or have a "Closed" badge to distinguish them from active positions.
+- This fix must apply to all portfolios — PSE stocks, international stocks, and custom asset portfolios.
+
+---
+
+### 3.3 Custom Asset Transaction Logic — "Deposit as Asset" Flow
+
+**Current issue:** For custom assets like Government Bonds, the only transaction options are investment-style ones (Buy, Sell, Dividend, etc.). When the user deposits cash into a bond account, there is no way to classify that deposit as an asset that contributes to Current Value. The deposit currently behaves like idle cash, not like an asset.
+
+**Required behavior — "Deposit as Asset" classification:**
+
+For **custom asset types** (specifically: Savings Account, Bonds, and Other Custom Assets), a **Deposit** transaction should be treated as **adding to the asset value** — not as adding to idle cash.
+
+Here is the exact logic Replit must implement:
+
+#### How Deposits on Custom Assets Work:
+
+1. **When a user adds a "Deposit" transaction to a custom asset holding:**
+   - The deposited amount increases the **Current Value** of that holding.
+   - It is classified as an **asset contribution**, not idle cash.
+   - Formula: `holding.currentValue += depositAmount`
+   - The holding shows up in the **Current Value** card (assets-only total).
+
+2. **Idle Cash vs. Asset Cash distinction:**
+   - Idle Cash = cash balance inside a portfolio that is NOT assigned to any holding (free-floating uninvested cash).
+   - Asset Cash = cash deposited into a specific custom holding (Savings, Bond, etc.) — this is considered invested/deployed, even though it earns interest rather than capital gains.
+   - When the user deposits into a custom holding, the idle cash balance must decrease by that amount (the money moves from idle to the asset).
+
+3. **How to reflect returns (interest/dividends) for custom assets:**
+   - When a "Dividend/Interest" or "Other Income" transaction is added to a custom asset holding, it contributes to **Total Profit → Dividends** (or a separate "Income" line if preferred).
+   - These income transactions do **not** increase the asset's principal/current value — they are profit only.
+
+4. **What appears in each Portfolio card for custom assets:**
+
+| Card | What it shows for custom asset holdings |
+|---|---|
+| Total Portfolio Value | Includes custom asset deposits (principal) + any income |
+| Current Value | Includes custom asset current value (principal deposited) |
+| Total Profit | Includes income/interest earned on the custom asset |
+| Total Cash | Only shows true idle cash — does NOT include custom asset deposits |
+
+5. **Transaction type changes for Bonds specifically:**
+
+For holdings with asset type **Bonds**, the transaction dropdown must include:
+```
+TRADE group:
+  Buy          ← For purchasing bond units on secondary market
+  Sell         ← For selling bond units
+
+INCOME group:
+  Coupon / Interest    ← Regular coupon payments
+  Maturity             ← Principal returned at maturity
+  Other Income
+
+CASH group:
+  Deposit      ← For depositing principal into bond account (treated as asset value)
+  Withdrawal   ← For withdrawing from bond account
+
+EXPENSE group:
+  Other Expenses
+```
+
+The key addition is **Deposit** in the CASH group for Bonds — so the user can deposit into their bond account and have it count as an asset.
+
+6. **Example flow for Government Bonds (for Replit to follow):**
+```
+User has: Idle Cash = ₱100,000 in "Pagibig MP2" portfolio
+User adds Deposit transaction on "Government Bond" holding = ₱50,000
+
+Result:
+  Idle Cash:           ₱50,000 (reduced from ₱100,000)
+  Government Bond (Current Value): ₱50,000 (increased from ₱0)
+  Total Portfolio Value: ₱100,000 (unchanged — money moved, not added)
+  Current Value card:  ₱50,000 (bond is now an asset)
+  Total Cash card:     ₱50,000 (remaining idle cash)
+
+Later: Coupon Interest = ₱1,500 added as "Coupon/Interest" transaction on the bond
+
+Result:
+  Total Profit → Dividends: +₱1,500
+  Government Bond (Current Value): ₱50,000 (principal unchanged)
+  Total Portfolio Value: ₱101,500
+```
+
+---
+
+### 3.4 "Hide Values" Global Icon — Fix Scope
+
+**Current issue:** The eye/hide icon in the top navigation bar (visible in screenshots as a strikethrough-eye icon) currently only hides the transaction list in the Portfolio section.
+
+**Required fix:** The hide icon must hide **ALL numerical values** across the entire app — every number on every screen.
+
+**Scope of values to hide/show:**
+- Dashboard: All 4 metric card values, pie chart legend values and percentages.
+- Analytics: All metric card values, chart axis values, chart data labels, percentage breakdowns.
+- Dividend Calendar: All amount values in List view (Amount column), all values in the detail popup.
+- Portfolio: All metric card values (Total Portfolio Value, Total Profit, Current Value, Total Cash), all individual holding values and percentages, all transaction amounts.
+- Any other numerical value visible anywhere in the app.
+
+**How to hide:** Replace each numerical value with `••••••` (6 bullet characters) or `****` — do not leave blank spaces.
+
+**Implementation approach:**
+```javascript
+// Global state
+const [valuesHidden, setValuesHidden] = useState(false);
+
+// Toggle function — fired by the eye icon in top nav
+function toggleHideValues() {
+  setValuesHidden(prev => !prev);
+}
+
+// Helper used everywhere a value is rendered
+function displayValue(value, format = 'currency') {
+  if (valuesHidden) return '••••••';
+  return formatValue(value, format); // your existing formatter
+}
+```
+
+- Store the `valuesHidden` state in a global context (React Context or state management store) so all components can access it.
+- The eye icon must update its visual state: open eye = values visible, crossed-out eye = values hidden.
+- State must persist across tab/section navigation within the same session (but can reset on full app reload — persistence between sessions is optional).
+
+---
+
+## 4. GLOBAL UI — TOP NAVIGATION BAR IMPROVEMENTS
+
+### 4.1 Reduce Size of Currency Selector
+
+**Current issue (from screenshot):** The top navigation bar feels cramped — it shows: [Folio logo] [PHP ₱ currency dropdown — large] [swap icon] [monitor/sun/moon theme icons — 3 separate icons] [eye icon] [avatar].
+
+**Required change — currency selector:**
+- Reduce the currency selector button width. Currently it takes up too much space with "PHP ₱" + dropdown arrow.
+- New style: Compact pill button showing only the currency code and symbol: `PHP ₱ ▾`
+- Reduce font size to 13px and horizontal padding to 8px on each side.
+- The dropdown functionality and currency list must remain fully intact — only the button's visual size changes.
+
+---
+
+### 4.2 Theme Selector — Convert 3 Icons to a Single Toggle
+
+**Current issue:** The top nav shows three separate icon buttons for themes: [monitor icon] [sun icon] [moon icon]. These take up too much horizontal space and look cluttered.
+
+**Required change:** Replace the three separate theme icons with a **single compact toggle** that cycles through three states:
+
+```
+States:  System  →  Light  →  Dark  →  System  (cycles on each tap)
+```
+
+**Visual design:**
+- Single icon button (not three buttons).
+- The icon displayed reflects the current active theme:
+  - **System**: monitor/computer icon
+  - **Light**: sun icon
+  - **Dark**: moon icon
+- On tap, cycle to the next state and update the icon.
+- Optionally show a small label ("System" / "Light" / "Dark") below or as a tooltip on long-press, but the primary UI should be icon-only to save space.
+
+**Functional behavior (unchanged from current):**
+- System = follow device's OS light/dark preference.
+- Light = force light theme.
+- Dark = force dark theme.
+- Switching theme still applies immediately across the whole app — no change to this behavior.
+
+**Final top nav layout (left to right):**
+```
+[Folio logo]  [PHP ₱ ▾ compact]  [swap icon]  [theme icon — single cycling]  [eye icon]  [avatar]
+```
+
+This removes 2 icon slots and makes the nav significantly less cramped.
+
+---
+
+## Summary Checklist for Replit
+
+Before marking this batch complete, verify each item:
+
+**Analytics:**
+- [ ] Current Value = Total Assets + Total Profit
+- [ ] Invested sub-label = avg cost × quantity (total cost basis)
+- [ ] Total Profit = Cap Gain + Realized + Dividends only (no Cash Incentive)
+- [ ] Dividend Yield % = Annual Net Dividends ÷ Current Value × 100
+- [ ] Yield on Cost % = Annual Net Dividends ÷ Total Invested Cost × 100
+- [ ] Annual Passive Income = sum of last 12 months net dividends (PHP amount)
+- [ ] Growth 5Y = CAGR of dividends over 5 years (shows N/A if insufficient data)
+- [ ] Monthly dividend bars = sum of net dividends per month (gross − tax, in base currency)
+- [ ] Yearly dividend bars = sum of net dividends per year
+- [ ] Asset dividend bars = sum of net dividends per holding
+- [ ] Monthly total for a year = same number as that year's Yearly bar
+
+**Dividend Calendar:**
+- [ ] Calendar view dividend popup has Edit and Delete buttons
+- [ ] Edit opens full standard dividend transaction modal (pre-filled)
+- [ ] Saving edits propagates changes to all sections of app
+- [ ] Delete has confirmation dialog and removes record everywhere
+- [ ] Paid dividends show green chip in Calendar view (not yellow)
+- [ ] Pending/upcoming dividends show yellow/amber chip
+- [ ] List view: all 6 columns fully visible, no truncation, no horizontal scroll
+- [ ] Date format fits in column (MM/DD/YY)
+- [ ] Amount uses K notation if needed (₱24.6K)
+- [ ] Status badge shows full "Paid" or "Pending" text
+
+**Portfolio:**
+- [ ] Total Profit card shows Cap Gain + Realized + Dividends only
+- [ ] Total Cash card shows Cash Incentive subtext (replacing Div yield)
+- [ ] Active toggle OFF shows ALL holdings including zero-quantity ones
+- [ ] Zero-quantity holdings are visually dimmed or labeled "Closed"
+- [ ] Custom asset Deposit transaction increases Current Value (not idle cash)
+- [ ] Depositing into custom asset reduces idle cash by same amount
+- [ ] Bonds show Deposit option in transaction type dropdown
+- [ ] Coupon/Interest transactions go to Total Profit → Dividends
+- [ ] Hide Values icon hides ALL numerical values app-wide
+- [ ] Hidden values shown as ••••••
+
+**Global UI:**
+- [ ] Currency selector is compact (smaller font, less padding)
+- [ ] Theme selector is a single cycling icon button (not 3 icons)
+- [ ] Theme cycling order: System → Light → Dark → System
+- [ ] Top nav is noticeably less cramped after changes
+
+---
+
+*End of Part 2 instructions. Cross-reference Part 1 for Add Holding UI, Dashboard, and PSE API changes.*

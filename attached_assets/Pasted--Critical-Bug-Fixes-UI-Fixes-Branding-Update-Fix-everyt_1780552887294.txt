@@ -1,0 +1,132 @@
+**Critical Bug Fixes, UI Fixes & Branding Update**
+
+Fix everything below exactly as described. Find each issue first, fix it, then test it before moving on. Do not break anything currently working.
+
+---
+
+**BUG 1 — CRITICAL: BONDS AND FUNDS HOLDINGS NOT RECOGNIZED IN TRANSFER TRANSACTIONS**
+
+**Problem:** When I add a holding with asset type Bond or Fund, it does not appear as an option when creating a Transfer transaction (Cash to Holding or Holding to Cash).
+
+**Fix:**
+1. Find where the Transfer transaction form fetches the list of available holdings to populate the holding selector dropdown
+2. That list is likely filtered to only show Stock or ETF type assets — remove that filter
+3. The holding selector must show ALL holdings regardless of asset type: Stock, ETF, Fund, Crypto, Bond, Savings/Deposit, Cash Asset, Custom
+4. Make this fix universal — any current or future asset type must always appear in Transfer transaction selectors
+5. Test: Add a Bond holding → create a Cash to Holding transfer using that Bond → confirm it saves and reflects correctly. Repeat with a Fund holding.
+
+---
+
+**BUG 2 — CRITICAL: DIVIDEND RECORDS NOT DELETING PROPERLY ACROSS ALL THREE VIEWS**
+
+**Problem:** A dividend transaction appears in three places: Transaction History, Calendar View, and List View. When deleted from Transaction History, the record remains in Calendar and List View as an ex-dividend date that cannot be deleted. The "Yes, Delete" button in Calendar/List View does nothing.
+
+**The rule going forward:**
+- When a dividend transaction is created, it is immediately treated as **Paid** status
+- It shows as a **Paid** record in all three views simultaneously: Transaction History, Calendar View, and List View
+- Do NOT create a separate ex-dividend date entry when a dividend transaction is added
+- All three views must show the exact same record — they must be linked to the same single database record
+
+**Fix:**
+1. Find where the code creates a separate ex-dividend date entry when a dividend transaction is saved — remove that behavior entirely
+2. The Calendar View and List View must read dividend data directly from the transaction records in the database, not from a separate dividend schedule or ex-dividend table
+3. Implement a single-source-of-truth: one dividend transaction record in the database, displayed in all three views
+4. **Sync edits and deletes across all three views:**
+   - If I edit a dividend in Transaction History → Calendar View and List View update immediately
+   - If I edit a dividend in Calendar View → Transaction History and List View update immediately
+   - If I edit a dividend in List View → Transaction History and Calendar View update immediately
+   - If I delete from any of the three → it is removed from all three immediately
+5. Fix the broken "Yes, Delete" button in Calendar and List View — it must actually delete the record from the database and remove it from all three views
+6. Test: Create a dividend → confirm it shows as Paid in all 3 views → Edit from Calendar → confirm Transaction History and List View both reflect the change → Delete from List View → confirm it disappears from all 3 views
+
+---
+
+**BUG 3 — UI FIX: TOTAL CASH DISPLAY IN PORTFOLIO SECTION AND DASHBOARD**
+
+**Problem:** The Total Cash section currently shows the cash balance value. The display needs to change to show the difference between Total Portfolio Value and Current Value (market value of holdings).
+
+**Formula for display:**
+```
+Total Cash displayed = Total Portfolio Value − Current Value (holdings market value)
+```
+
+**Example:** Total Portfolio Value = ₱100,000 and Current Value (holdings) = ₱90,000 → Total Cash displays ₱10,000
+
+**Fix:**
+1. This is a **display change only** — do not change any calculations or stored data
+2. In the Portfolio detail screen (where Total Profit, Current Value, and Total Cash cards are shown), change the Total Cash card to display: Total Portfolio Value minus Current Value
+3. Apply the same display change to the Total Cash section on the Dashboard
+4. The subtext formatting and color coding remain the same
+5. Test: Verify the displayed Total Cash equals Total Portfolio Value minus the sum of all holdings' current market values
+
+---
+
+**BUG 4 — UX FIX: PORTFOLIO TAB DOES NOT REMEMBER LAST ACTIVE SECTION**
+
+**Problem:** When I am inside a portfolio viewing a specific section (Transactions, Holdings, Dividends, Rebalance, Attribution, Notes) and navigate away to another tab (Dashboard, Analytics, etc.), when I return to Portfolio the app goes back to the default view instead of where I was.
+
+**Fix:**
+1. Store the last active section for each portfolio view in navigation state or a lightweight persistent store (AsyncStorage or equivalent)
+2. When the user returns to the Portfolio tab, restore them to the exact section and portfolio they were viewing
+3. This applies to all sections within a portfolio: Holdings, Transactions, Dividends, Rebalance, Attribution, Notes
+4. If the user was at the main Portfolios list, restore to the main list
+5. If the user was inside a specific portfolio on the Transactions tab, restore to that portfolio's Transactions tab
+6. State persists across tab switches. Resetting on full app restart is acceptable
+7. Test: Open Philippine Stocks → go to Transactions tab → switch to Dashboard → switch back to Portfolio → confirm Transactions tab of Philippine Stocks is still showing
+
+---
+
+**BUG 5 — UI ADDITION: CALENDAR VIEW NAVIGATION IMPROVEMENTS**
+
+Add three navigation improvements to the Dividend Calendar View:
+
+**A. Today Button:**
+- Add a "Today" button near the month/year header in Calendar View
+- Tapping it instantly navigates the calendar to the current month and highlights today's date
+- Style it as a small outlined button next to the navigation arrows
+
+**B. Month Dropdown:**
+- Make the month name in the header tappable
+- Tapping it opens a dropdown showing all 12 months (January through December)
+- Selecting a month jumps directly to that month in the current year
+
+**C. Year Dropdown:**
+- Make the year in the header tappable
+- Tapping it opens a dropdown showing a range of years (e.g. current year ±5 years)
+- Selecting a year jumps directly to that year keeping the current month
+
+**Combined header layout:**
+```
+[  <  ]   [January ▾]  [2026 ▾]  [Today]  [  >  ]
+```
+
+The left/right arrows still work for month-by-month navigation. The dropdowns and Today button are additional shortcuts.
+
+---
+
+**BUG 6 — BRANDING UPDATE: RENAME FROM "FOLIO" TO "PHINANCE" AND UPDATE LOGO**
+
+Rename the app from "Folio" to "Phinance" and replace the logo throughout the entire app.
+
+**Fix:**
+1. Replace every instance of the text "Folio" with "Phinance" throughout the entire app — all screens, headers, titles, splash screens, login/sign-in page, and any metadata
+2. Replace the current logo/icon with the new logo provided in the attached photo
+3. Apply the new logo and name to:
+   - The sign-in / login screen
+   - The main app header (top left where "Folio" currently appears)
+   - Any loading or splash screen
+   - Any other screen where the app name or logo appears
+4. Keep the branding consistent — same logo, same name "Phinance" everywhere
+5. Do not change any functionality — this is a name and logo replacement only
+6. If the logo file needs to be referenced, use the attached image file as the source asset
+7. Test: Launch the app, check login screen, check main header, check all screens — "Folio" must not appear anywhere, "Phinance" and new logo must appear consistently
+
+---
+
+**GLOBAL REQUIREMENTS**
+- Fix each bug in order
+- Find the root cause first, then fix, then test — do not guess
+- Do not change any financial calculations
+- Do not break any currently working features
+- Every data change (edit, delete) must immediately reflect across all affected views
+- Test each fix with at least 2 different scenarios before marking complete

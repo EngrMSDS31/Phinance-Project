@@ -1,0 +1,44 @@
+import { Router, type IRouter } from "express";
+import healthRouter from "./health";
+import portfoliosRouter from "./portfolios";
+import holdingsRouter from "./holdings";
+import transactionsRouter from "./transactions";
+import watchlistsRouter from "./watchlists";
+import alertsRouter from "./alerts";
+import notificationsRouter from "./notifications";
+import pricesRouter from "./prices";
+import dividendsRouter from "./dividends";
+import dashboardRouter from "./dashboard";
+import csvRouter from "./csv";
+import benchmarkRouter from "./benchmark";
+import rebalanceRouter from "./rebalance";
+import taxReportRouter from "./tax-report";
+import fxRatesRouter from "./fx-rates";
+import notesRouter from "./notes";
+import recurringRouter from "./recurring";
+import attributionRouter from "./attribution";
+import sizerRouter from "./sizer";
+
+const router: IRouter = Router();
+
+router.use(healthRouter);
+router.use("/portfolios", portfoliosRouter);
+router.use("/portfolios/:portfolioId/holdings", holdingsRouter);
+router.use("/portfolios/:portfolioId/transactions", transactionsRouter);
+router.use("/portfolios/:portfolioId/csv", csvRouter);
+router.use("/portfolios/:portfolioId/benchmark", benchmarkRouter);
+router.use("/portfolios/:portfolioId/rebalance", rebalanceRouter);
+router.use("/portfolios/:portfolioId/attribution", attributionRouter);
+router.use("/sizer", sizerRouter);
+router.use("/tax-report", taxReportRouter);
+router.use("/fx-rates", fxRatesRouter);
+router.use("/notes", notesRouter);
+router.use("/recurring", recurringRouter);
+router.use("/watchlists", watchlistsRouter);
+router.use("/alerts", alertsRouter);
+router.use("/notifications", notificationsRouter);
+router.use("/prices", pricesRouter);
+router.use("/dividend-calendar", dividendsRouter);
+router.use("/dashboard", dashboardRouter);
+
+export default router;
