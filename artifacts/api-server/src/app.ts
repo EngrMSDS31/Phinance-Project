@@ -14,7 +14,7 @@ import { logger } from "./lib/logger.js";
 const app = express();
 
 app.use(
-  pinoHttp({
+  pinoHttp.default({
     logger,
     serializers: {
       req(req: { id?: string; method?: string; url?: string }) {
