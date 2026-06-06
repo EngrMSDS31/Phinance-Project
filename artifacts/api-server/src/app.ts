@@ -38,6 +38,17 @@ app.use(cors({ credentials: true, origin: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+app.get("/", (_req, res) => {
+  res.status(200).json({
+    status: "ok",
+    message: "API server is running",
+  });
+});
+
+app.get("/health", (_req, res) => {
+  res.status(200).send("ok");
+});
+
 app.use(
   clerkMiddleware((req: any) => ({
     publishableKey: publishableKeyFromHost(
